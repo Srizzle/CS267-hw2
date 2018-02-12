@@ -286,8 +286,8 @@ int main( int argc, char **argv )
 
     //call the simulator
     Serial_output output;
-    simulate_particles_naives(particles, n, output, fsave, argc, argv);
-    //simulate_particles(particles, n, output, fsave, argc, argv);
+    //simulate_particles_naives(particles, n, output, fsave, argc, argv);
+    simulate_particles(particles, n, output, fsave, argc, argv);
 
     simulation_time = read_timer( ) - simulation_time;
 
