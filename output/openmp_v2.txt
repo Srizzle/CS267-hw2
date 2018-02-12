@@ -1,0 +1,44 @@
+n = 500, simulation time = 0.126258 seconds
+Optimized Openmp 
+n = 500,threads = 1, simulation time = 0.123889 seconds
+Optimized Openmp 
+n = 500,threads = 2, simulation time = 0.079708 seconds
+Optimized Openmp 
+n = 500,threads = 4, simulation time = 0.075848 seconds
+Optimized Openmp 
+n = 500,threads = 6, simulation time = 0.074495 seconds
+Optimized Openmp 
+n = 500,threads = 12, simulation time = 0.049609 seconds
+Optimized Openmp 
+n = 500,threads = 18, simulation time = 0.045358 seconds
+Optimized Openmp 
+n = 500,threads = 24, simulation time = 0.047048 seconds
+Optimized Openmp 
+n = 500,threads = 32, simulation time = 0.030228 seconds
+Optimized Openmp 
+n = 1000,threads = 2, simulation time = 0.156852 seconds
+Optimized Openmp 
+n = 2000,threads = 4, simulation time = 0.23771 seconds
+Optimized Openmp 
+n = 3000,threads = 6, simulation time = 0.25858 seconds
+Optimized Openmp 
+n = 6000,threads = 12, simulation time = 0.287005 seconds
+Optimized Openmp 
+n = 9000,threads = 18, simulation time = 0.329211 seconds
+Optimized Openmp 
+n = 12000,threads = 24, simulation time = 0.33113 seconds
+Optimized Openmp 
+n = 16000,threads = 32, simulation time = 0.454943 seconds
+
+Strong scaling estimates are :
+    1.02    1.58    1.66    1.69    2.55    2.78    2.68    4.18 (speedup)
+    1.02    0.79    0.42    0.28    0.21    0.15    0.11    0.13 (efficiency)    for
+       1       2       4       6      12      18      24      32 threads/processors
+
+Average strong scaling efficiency:    0.39 
+
+Weak scaling estimates are :
+    1.02    0.80    0.53    0.49    0.44    0.38    0.38    0.28 (efficiency)    for
+       1       2       4       6      12      18      24      32 threads/processors
+
+Average weak scaling efficiency:    0.54 
