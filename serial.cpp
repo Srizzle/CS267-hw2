@@ -6,18 +6,12 @@
 #include <vector>
 #include <set>
 #include <iostream>
-#include <omp.h>
+#include <pthread.h>
 
 using namespace std;
 
-#define FIND_POS(ROW_INDEX, COL_INDEX, NUM_BLOCKS_PER_DIM) (ROW_INDEX * NUM_BLOCKS_PER_DIM + COL_INDEX)
-
-//the length of each blocks
-double BLOCK_SIZE = 0;
-//the maximum span of the particles in both dimension
-double GRID_SIZE = 1;
-//number of blocks per dim, so the overall number of number of blocks is its square
-int NUM_BLOCKS_PER_DIM = -1;
+double GRID_SIZE = 0;
+double TOTAL_SIZE = 1;
 
 struct Serial_output{
     int nabsavg;
@@ -30,12 +24,6 @@ struct Serial_output{
     }
 };
 
-vector<vector<set<int> > > grid;
-vector<omp_lock_t> block_locks; //for each block, there is a lock
-
-
-
-//Called in compute_force_grid
 void compute_force_within_block(set<int>& block, particle_t* particles,
           int* navg, double* davg, double* dmin){
 
@@ -46,7 +34,6 @@ void compute_force_within_block(set<int>& block, particle_t* particles,
     }
 }
 
-//Called in compute_force_grid
 void compute_force_between_blocks(set<int>& block_A, set<int>& block_B, particle_t* particles,
           int* navg, double* davg, double* dmin){
   for (set<int>::iterator it_A = block_A.begin(); it_A != block_A.end(); it_A++){
@@ -56,138 +43,111 @@ void compute_force_between_blocks(set<int>& block_A, set<int>& block_B, particle
   }
 }
 
-//Called in move_particles to change the membership
 void move_to_another_block(int i, double old_x, double old_y,
-                particle_t* particles){
+                vector<vector<set<int> > >& grid,
+                particle_t* particles, double GRID_SIZE){
 
-      int which_block_x_old = min((int)(old_x / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
-      int which_block_y_old = min((int)(old_y / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
+      int numRows = TOTAL_SIZE / GRID_SIZE;
+      int numCols = TOTAL_SIZE / GRID_SIZE;
 
-      int which_block_x = min((int)(particles[i].x / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
-      int which_block_y = min((int)(particles[i].y / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
+      int which_block_x_old = min((int)(old_x / GRID_SIZE), numRows - 1);
+      int which_block_y_old = min((int)(old_y / GRID_SIZE), numCols - 1);
+
+      int which_block_x = min((int)(particles[i].x / GRID_SIZE), numRows - 1);
+      int which_block_y = min((int)(particles[i].y / GRID_SIZE), numCols - 1);
 
       // cout << which_block_x_old << "," << which_block_y_old << "=>" << which_block_x << "," << which_block_y << endl;
 
       if (which_block_x_old != which_block_x || which_block_y_old != which_block_y){
-        int old_block_index = FIND_POS(which_block_y_old, which_block_x_old, NUM_BLOCKS_PER_DIM);
-        int new_block_index = FIND_POS(which_block_y, which_block_x, NUM_BLOCKS_PER_DIM);
-        //lock, update, and release the old block
-        omp_set_lock(&block_locks[old_block_index]);
         grid[which_block_y_old][which_block_x_old].erase(i);
-        omp_unset_lock(&block_locks[old_block_index]);
-        //lock, update, and release the new block
-        omp_set_lock(&block_locks[new_block_index]);
         grid[which_block_y][which_block_x].insert(i);
-        omp_unset_lock(&block_locks[new_block_index]);
       }
 }
 
-//Called in simulate_particles
-void compute_force_grid(particle_t* particles, int* navg, double* davg, double* dmin){
+void compute_force_grid(vector<vector<set<int> > >& grid,
+            particle_t* particles, double GRID_SIZE, int* navg, double* davg, double* dmin){
+    int numRows = TOTAL_SIZE / GRID_SIZE;
+    int numCols = TOTAL_SIZE / GRID_SIZE;
+    for (int i = 0; i < numRows; i++){
+      for (int j = 0; j < numCols; j++){
+        //printf("Block %d, %d has %d particles \n", i, j, grid[i][j].size());
 
-    #pragma omp parallel num_threads(4)
-    {
-      #pragma omp for
-      for (int i = 0; i < NUM_BLOCKS_PER_DIM; i++){
-        for (int j = 0; j < NUM_BLOCKS_PER_DIM; j++){
-          //printf("Block %d, %d has %d particles \n", i, j, grid[i][j].size());
-
-          //set acceleration to zero
-          for (set<int>::iterator it = grid[i][j].begin(); it != grid[i][j].end(); it++){
-            particles[*it].ax = particles[*it].ay = 0;
-          }
-
-          //check right
-          if (j != NUM_BLOCKS_PER_DIM - 1){
-            compute_force_between_blocks(grid[i][j], grid[i][j+1], particles, navg, davg, dmin);
-          }
-          //check diagonal right bot
-          if (j != NUM_BLOCKS_PER_DIM - 1 && i != NUM_BLOCKS_PER_DIM - 1){
-            compute_force_between_blocks(grid[i][j], grid[i+1][j+1], particles, navg, davg, dmin);
-          }
-          //check diagonal right top
-          if (j != NUM_BLOCKS_PER_DIM - 1 && i != 0){
-            compute_force_between_blocks(grid[i][j], grid[i-1][j+1], particles, navg, davg, dmin);
-          }
-          //check left
-          if (j != 0){
-            compute_force_between_blocks(grid[i][j], grid[i][j-1], particles, navg, davg, dmin);
-          }
-          //check diagonal left bot
-          if (j != 0 && i != NUM_BLOCKS_PER_DIM - 1){
-            compute_force_between_blocks(grid[i][j], grid[i+1][j-1], particles, navg, davg, dmin);
-          }
-          //check diagonal left top
-          if (j != 0 && i != 0){
-            compute_force_between_blocks(grid[i][j], grid[i-1][j-1], particles, navg, davg, dmin);
-          }
-          //check top
-          if (i != 0){
-            compute_force_between_blocks(grid[i][j], grid[i-1][j], particles, navg, davg, dmin);
-          }
-          //check bot
-          if (i != NUM_BLOCKS_PER_DIM - 1){
-            compute_force_between_blocks(grid[i][j], grid[i+1][j], particles, navg, davg, dmin);
-          }
-          //compute within itself
-          compute_force_within_block(grid[i][j], particles, navg, davg, dmin);
+        //set acceleration to zero
+        for (set<int>::iterator it = grid[i][j].begin(); it != grid[i][j].end(); it++){
+          particles[*it].ax = particles[*it].ay = 0;
         }
+
+        //check right
+        if (j != numCols - 1){
+          compute_force_between_blocks(grid[i][j], grid[i][j+1], particles, navg, davg, dmin);
+        }
+        //check diagonal right bot
+        if (j != numCols - 1 && i != numRows - 1){
+          compute_force_between_blocks(grid[i][j], grid[i+1][j+1], particles, navg, davg, dmin);
+        }
+        //check diagonal right top
+        if (j != numCols - 1 && i != 0){
+          compute_force_between_blocks(grid[i][j], grid[i-1][j+1], particles, navg, davg, dmin);
+        }
+        //check left
+        if (j != 0){
+          compute_force_between_blocks(grid[i][j], grid[i][j-1], particles, navg, davg, dmin);
+        }
+        //check diagonal left bot
+        if (j != 0 && i != numRows - 1){
+          compute_force_between_blocks(grid[i][j], grid[i+1][j-1], particles, navg, davg, dmin);
+        }
+        //check diagonal left top
+        if (j != 0 && i != 0){
+          compute_force_between_blocks(grid[i][j], grid[i-1][j-1], particles, navg, davg, dmin);
+        }
+        //check top
+        if (i != 0){
+          compute_force_between_blocks(grid[i][j], grid[i-1][j], particles, navg, davg, dmin);
+        }
+        //check bot
+        if (i != numRows - 1){
+          compute_force_between_blocks(grid[i][j], grid[i+1][j], particles, navg, davg, dmin);
+        }
+        //compute within itself
+        compute_force_within_block(grid[i][j], particles, navg, davg, dmin);
       }
     }
 }
 
-//Call in simulate_particles, after finsih computing force
-void move_particles(particle_t* particles, int n){
-  #pragma omp parallel num_threads(4)
-  {
-    #pragma omp for
-    for (int i = 0; i < n; i++){
-      double old_x = particles[i].x;
-      double old_y = particles[i].y;
-      move(particles[i]);
-      //check if the particle might move to another block
-      move_to_another_block(i, old_x, old_y, particles);
-    }
+void move_particles(particle_t* particles, int n, vector<vector<set<int> > >& grid, double grid_size){
+  for (int i = 0; i < n; i++){
+    double old_x = particles[i].x;
+    double old_y = particles[i].y;
+    move(particles[i]);
+    //check if the particle might move to another block
+    move_to_another_block(i, old_x, old_y, grid, particles, grid_size);
   }
 }
 
-//Called once to generate the grid
-void generateGrid(particle_t* particles, int n){
-    //initialize the grid with NUM_BLOCKS_PER_DIM^2
-    grid = vector<vector<set<int> > >(NUM_BLOCKS_PER_DIM, vector< set<int> >(NUM_BLOCKS_PER_DIM, set<int>()));
-    //initialize the block_locks with the number of blocks
-    block_locks = vector<omp_lock_t>(NUM_BLOCKS_PER_DIM * NUM_BLOCKS_PER_DIM);
+
+vector<vector<set<int> > > generateGrid(particle_t* particles, int n, double GRID_SIZE){
+    //initialize the grid with 10 * 10;
+    int numRols = TOTAL_SIZE / GRID_SIZE;
+    int numCols = TOTAL_SIZE / GRID_SIZE;
+    vector<vector<set<int> > > grid(numRols, vector< set<int> >(numCols, set<int>() ) );
+
     //store the point into the grid
-    #pragma omp parallel num_threads(4)
-    {
-      #pragma omp for
-      for (int i = 0; i < n; i++){
-          int which_block_x = min((int)(particles[i].x / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
-          int which_block_y = min((int)(particles[i].y / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
-
-          //set the lock, update it and release
-          int block_index = FIND_POS(which_block_y, which_block_x, NUM_BLOCKS_PER_DIM);
-          omp_set_lock(&block_locks[block_index]);
-          grid[which_block_y][which_block_x].insert(i);
-          omp_unset_lock(&block_locks[block_index]);
-          //cout << which_block_x << " " << which_block_y << endl;
+    for (int i = 0; i < n; i++){
+        int which_block_x = (int)(particles[i].x / GRID_SIZE);
+        int which_block_y = (int)(particles[i].y / GRID_SIZE);
+        grid[min(which_block_y, numRols - 1)][min(which_block_x, numCols - 1)].insert(i);
+        //cout << which_block_x << " " << which_block_y << endl;
+    }
+    for (int i = 0; i < numRols; i++){
+      for (int j = 0; j < numCols; j++){
+        //cout << "Block " << i << "," << j << " contains " << grid[i][j].size() << " particles" << endl;
       }
     }
+
+    return grid;
 }
 
-//Called once to initialize block_lockss
-void initializeBlockLocks(){
-
-  #pragma omp parallel num_threads(4)
-  {
-    #pragma omp for
-    for (int i = 0; i < block_locks.size(); i++){
-      omp_init_lock(&block_locks[i]);
-    }
-  }
-}
-
-//Called once, no need to parallized
 double findSize(particle_t* particles, int n){
   double min_x = 1 << 30;
   double min_y = 1 << 30;
@@ -199,6 +159,8 @@ double findSize(particle_t* particles, int n){
       min_y = min(particles[i].y, min_y);
       max_y = max(particles[i].y, max_y);
   }
+  // cout << min_x << " " << max_x << endl;
+  // cout << min_y << " " << max_y << endl;
   double size = max(max_x - min_x, max_y - min_y);
   return size;
 }
@@ -210,17 +172,14 @@ void simulate_particles(particle_t* particles, int n, Serial_output& output, FIL
     double dmin = 1.0;
     double cutoff = 0.01;
 
-    //initialize a bunck of stuff here
-
-    GRID_SIZE = findSize(particles, n);
-    BLOCK_SIZE = GRID_SIZE / NUM_BLOCKS_PER_DIM;
-    if (BLOCK_SIZE < 0.01)
-      BLOCK_SIZE = (GRID_SIZE / ((int)(ceil(GRID_SIZE / cutoff))));
-    NUM_BLOCKS_PER_DIM =  GRID_SIZE / BLOCK_SIZE;
+    TOTAL_SIZE = findSize(particles, n);
+    GRID_SIZE = TOTAL_SIZE / ((int)sqrt(n));
+    if (GRID_SIZE < 0.01)
+      GRID_SIZE = (TOTAL_SIZE / ((int)(ceil(TOTAL_SIZE / cutoff))));
+    //cout << TOTAL_SIZE << " " << GRID_SIZE << endl;
 
     //gerenate grid
-    generateGrid(particles, n);
-    initializeBlockLocks();
+    vector<vector<set<int> > > grid = generateGrid(particles, n, GRID_SIZE);
 
     for( int step = 0; step < NSTEPS; step++ ) {
   	    navg = 0;
@@ -228,10 +187,10 @@ void simulate_particles(particle_t* particles, int n, Serial_output& output, FIL
   	    dmin = 1.0;
 
         //compute force within the grid
-        compute_force_grid(particles, &navg, &davg, &dmin);
+        compute_force_grid(grid, particles, GRID_SIZE, &navg, &davg, &dmin);
 
         //move the particles
-        move_particles(particles, n);
+        move_particles(particles, n, grid, GRID_SIZE);
 
         //book keeping
         if( find_option( argc, argv, "-no" ) == -1 )
@@ -248,8 +207,10 @@ void simulate_particles(particle_t* particles, int n, Serial_output& output, FIL
               save( fsave, n, particles );
           }
         }
+        //cout << "-------" << endl;
     }
 }
+
 
 void simulate_particles_naives(particle_t* particles, int n, Serial_output& output, FILE* fsave, int argc, char** argv){
 
@@ -325,8 +286,8 @@ int main( int argc, char **argv )
 
     //call the simulator
     Serial_output output;
-    //simulate_particles_naives(particles, n, output, fsave, argc, argv);
-    simulate_particles(particles, n, output, fsave, argc, argv);
+    simulate_particles_naives(particles, n, output, fsave, argc, argv);
+    //simulate_particles(particles, n, output, fsave, argc, argv);
 
     simulation_time = read_timer( ) - simulation_time;
 
