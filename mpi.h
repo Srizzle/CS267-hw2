@@ -8,21 +8,26 @@
 #include <set>
 #include <iostream>
 #include <iterator>
+#include <cassert>
 
 using namespace std;
 
 #define BLOCKS_INITIALIZATION_TAG 1
 #define CLUSTERINFO_INITIALIZATION_TAG 2
-#define REQUEST_AND_FEED_EDGES 3
+#define REQUEST_AND_FEED_EDGES_TAG 3
+#define TRANSFER_PARTICLE_TAG 4
+#define END_OF_TRANSMISSION_TAG 5
+
 #define MASTER 0
 #define MAX_RECV_BUFFER_SIZE 100 //1000 particle data type
-#define DEBUG 0
+#define DEBUG 1
 
 //define some datatype
 MPI_Datatype PARTICLE;
 MPI_Datatype CLUSTERINFO;
 MPI_Datatype METADATA;
 
+/*--------------------define some structure we need--------------------*/
 
 struct Block{
   vector<particle_t> particles;
@@ -69,3 +74,60 @@ struct MetaData{
     GRID_SIZE = -1;
   };
 };
+
+/*--------------------define some global variables we need--------------------*/
+double GRID_SIZE = -1;
+double BLOCK_SIZE = -1;
+int NUM_BLOCKS_PER_DIM = -1;
+double CUT_OFF = 0.01;
+int NUM_PARTICLES = -1;
+int NUM_PROC = -1;
+int RANK = -1;
+ClusterInfo myClusterInfo;
+
+vector<vector<Block> > myBlocks;
+vector<Block> topEdge;
+vector<Block> botEdge;
+vector<ClusterInfo> cluster_layout;
+
+
+/*--------------------define some helpers we need--------------------*/
+bool withinRange(int rank, int x, int y){
+  ClusterInfo myInfo = cluster_layout[rank];
+  if (y < myInfo.start_row || y > myInfo.end_row)
+    return false;
+  if (x < myInfo.start_col || x > myInfo.end_col)
+    return false;
+  return true;
+}
+
+int locateRecipient(int x, int y){
+  for (int i = 0; i < NUM_PROC; i++){
+    if (withinRange(i, x, y))
+      return i;
+  }
+  return -1;
+}
+
+void printSummary(){
+  printf("Processor %d: GRID_SIZE %f, BLOCK_SIZE %f, NUM_BLOCKS_PER_DIM %d, NUM_PARTICLES %d \n",
+        RANK, GRID_SIZE, BLOCK_SIZE, NUM_BLOCKS_PER_DIM, NUM_PARTICLES);
+  printf("Processor %d: ClusterInfo; start_row %d, end_row %d, start_col %d, end_col %d \n",
+        RANK, cluster_layout[RANK].start_row, cluster_layout[RANK].end_row,
+        cluster_layout[RANK].start_col, cluster_layout[RANK].end_col);
+}
+
+void printBlocks(){
+  ClusterInfo myInfo = cluster_layout[RANK];
+  int count = 0;
+  for (int i = myInfo.start_row; i <= myInfo.end_row; i++){
+    for (int j = myInfo.start_col; j <= myInfo.end_col; j++){
+      if (DEBUG == 3)
+        printf("%d ", myBlocks[i-myInfo.start_row][j].particles.size());
+      count += myBlocks[i-myInfo.start_row][j].particles.size();
+    }
+    if (DEBUG == 3)
+      printf("\n");
+  }
+  printf("Processor %d: Total %d particles------------------------------- \n", RANK, count);
+}
