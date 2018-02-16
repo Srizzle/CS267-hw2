@@ -144,7 +144,6 @@ vector<vector<set<int> > > generateGrid(particle_t* particles, int n, double GRI
         //cout << "Block " << i << "," << j << " contains " << grid[i][j].size() << " particles" << endl;
       }
     }
-
     return grid;
 }
 
