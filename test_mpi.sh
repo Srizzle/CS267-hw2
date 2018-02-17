@@ -1,1 +1,1 @@
-mpiexec -np 3 ./mpi -n $1 
+mpiexec -np 2 ./mpi -n $1 

@@ -122,11 +122,8 @@ void master_routine(particle_t* particles, int n){
 void receive_clusterInfo_from_master(int source){
   cluster_layout = vector<ClusterInfo>(NUM_PROC, ClusterInfo());
   MPI_Bcast(&cluster_layout.front(), cluster_layout.size(), CLUSTERINFO, source, MPI_COMM_WORLD);
-
   //initialize the top and bot edge buffer
   ClusterInfo myInfo = cluster_layout[RANK];
-  // topEdge = vector<Block>(myInfo.end_col - myInfo.start_col + 1);
-  // botEdge = vector<Block>(myInfo.end_col - myInfo.start_col + 1);
 }
 
 //Called by all the processors to receive metadata broadcasted from the master
@@ -141,23 +138,20 @@ void receive_metaData_from_master(int source){
 
 //Called by all the processors to receive blocks from the master
 void receive_blocks_from_master(int source, int tag){
+  ClusterInfo myCluster = cluster_layout[RANK];
   int real_num_particles;
   MPI_Status status;
-  for (int i = cluster_layout[RANK].start_row; i <= cluster_layout[RANK].end_row; i++){
+  for (int i = 0; i <= myCluster.end_row - myCluster.start_row; i++){
     vector<Block> line;
-    for (int j = cluster_layout[RANK].start_col; j <= cluster_layout[RANK].end_col; j++){
+    for (int j = 0; j <= myCluster.end_col - myCluster.start_col; j++){
       vector<particle_t> buffer(MAX_RECV_BUFFER_SIZE, particle_t());
       MPI_Recv(&buffer.front(), MAX_RECV_BUFFER_SIZE, PARTICLE, source, tag, MPI_COMM_WORLD, &status);
       MPI_Get_count(&status, PARTICLE, &real_num_particles);
       buffer.resize(real_num_particles);
       line.push_back(Block(buffer));
-      // printf("Processor %d: Received %d particles in Block [%d, %d] tag = %d \n",
-      //   RANK, real_num_particles, i, j, status.MPI_TAG);
     }
     myBlocks.push_back(line);
   }
-  // printf("Process %d: Block [%d, %d] has %d particles \n",
-  //   RANK, cluster_layout[RANK].end_row, cluster_layout[RANK].end_col, myBlocks.back().back().particles.size());
 }
 
 //request and edge blocks to other processors (currently the one above and below it)
@@ -168,7 +162,7 @@ void request_and_feed_edges(int tag){
   //send top edge
   if (RANK != 0){
     recepient = RANK - 1;
-    for (int col = myInfo.start_col; col <= myInfo.end_col; col++){
+    for (int col = 0; col <= myInfo.end_col - myInfo.start_col; col++){
       MPI_Request request;
       MPI_Isend(&myBlocks[0][col].particles.front(), myBlocks[0][col].particles.size(),
                 PARTICLE, recepient, tag, MPI_COMM_WORLD, &request);
@@ -180,9 +174,9 @@ void request_and_feed_edges(int tag){
   //send bot edge
   if (RANK != NUM_PROC - 1){
     recepient = RANK + 1;
-    for (int col = myInfo.start_col; col <= myInfo.end_col; col++){
+    for (int col = 0; col <= myInfo.end_col - myInfo.start_col; col++){
       MPI_Request request;
-      MPI_Isend(&myBlocks[myInfo.end_row - myInfo.start_row][col].particles.front(), myBlocks[myInfo.end_row - myInfo.start_row] [col].particles.size(),
+      MPI_Isend(&myBlocks[myInfo.end_row - myInfo.start_row][col].particles.front(), myBlocks[myInfo.end_row - myInfo.start_row][col].particles.size(),
                 PARTICLE, recepient, tag, MPI_COMM_WORLD, &request);
       if (DEBUG == 3)
         printf("Processor %d: Send out block [%d, %d] to Processor %d, with %d particles \n",
@@ -194,10 +188,12 @@ void request_and_feed_edges(int tag){
   int sender = -1;
   int real_num_particles;
   MPI_Status status;
+  topEdge.clear();
+  botEdge.clear();
   //receive top edge
   if (RANK != 0){
     sender = RANK - 1;
-    for (int col = myInfo.start_col; col <= myInfo.end_col; col++){
+    for (int col = 0; col <= myInfo.end_col  - myInfo.start_col; col++){
       vector<particle_t> buffer(MAX_RECV_BUFFER_SIZE, particle_t());
       MPI_Recv(&buffer.front(), MAX_RECV_BUFFER_SIZE, PARTICLE, sender, tag, MPI_COMM_WORLD, &status);
       MPI_Get_count(&status, PARTICLE, &real_num_particles);
@@ -211,7 +207,7 @@ void request_and_feed_edges(int tag){
   //receive bot edge
   if (RANK != NUM_PROC-1){
     sender = RANK + 1;
-    for (int col = myInfo.start_col; col <= myInfo.end_col; col++){
+    for (int col = 0; col <= myInfo.end_col - myInfo.start_col; col++){
       vector<particle_t> buffer(MAX_RECV_BUFFER_SIZE, particle_t());
       MPI_Recv(&buffer.front(), MAX_RECV_BUFFER_SIZE, PARTICLE, sender, tag, MPI_COMM_WORLD, &status);
       MPI_Get_count(&status, PARTICLE, &real_num_particles);
@@ -225,7 +221,7 @@ void request_and_feed_edges(int tag){
 }
 
 //send particle to another block on a separate processor
-void transfer_particle(particle_t particle, int recepient, int tag){
+void transfer_particle(particle_t& particle, int recepient, int tag){
   MPI_Request request;
   MPI_Isend(&particle, 1, PARTICLE, recepient, tag, MPI_COMM_WORLD, &request);
 }
@@ -236,21 +232,18 @@ void transfer_particle(particle_t particle, int recepient, int tag){
 2. Membership changed to another block within the processor.
 3. Membership changed to another block outside the processor
 */
-void decide_membership(Block& currentBlock, double old_x, double old_y, particle_t particle){
+void decide_membership(Block& currentBlock, double old_x, double old_y, particle_t& particle){
   ClusterInfo myInfo = cluster_layout[RANK];
   int which_block_x_old = min((int)(old_x / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
   int which_block_y_old = min((int)(old_y / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
   int which_block_x = min((int)(particle.x / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
   int which_block_y = min((int)(particle.y / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
 
+  //assert((myInfo.start_row <= which_block_y_old) && (myInfo.end_row >= which_block_y_old));
+  //assert((myInfo.start_col <= which_block_x_old) && (myInfo.end_col >= which_block_x_old));
+
   if (which_block_x_old != which_block_x || which_block_y_old != which_block_y){
-    //case 2
-    if (withinRange(RANK, which_block_x, which_block_y)){
-      myBlocks[which_block_y - myInfo.start_row][which_block_x].particles.push_back(particle);
-    //case 3
-    }else{
-      transfer_particle(particle, locateRecipient(which_block_x, which_block_y), TRANSFER_PARTICLE_TAG);
-    }
+    transfer_particle(particle, locateRecipient(which_block_x, which_block_y), TRANSFER_PARTICLE_TAG);
   }else{
     //case 1
     currentBlock.particles.push_back(particle);
@@ -262,14 +255,14 @@ void decide_membership(Block& currentBlock, double old_x, double old_y, particle
 void poll_particles(int tag){
   ClusterInfo myInfo = cluster_layout[RANK];
   MPI_Status status;
-  particle_t placeholder;
   int finished_processes = 0; //indicates how many other processes havve finished sending their particles to this process
   //we wont stop until receive terminate symbols from all  processes (including itself)
   while (finished_processes != NUM_PROC){
+    particle_t placeholder;
     //polling any incoming particles
     MPI_Recv(&placeholder, 1, PARTICLE, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
     //check if it is a terminate symbol //x == y == -1 is our termiante symbols
-    if (placeholder.x == -1 && placeholder.y == -1){
+    if (placeholder.x == -1.0 || placeholder.y == -1.0){
       finished_processes++;
       if (DEBUG == 2)
         printf("Processor: %d: Finish polling from Processor %d \n", status.MPI_SOURCE);
@@ -279,12 +272,12 @@ void poll_particles(int tag){
     int which_block_x = min((int)(placeholder.x / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
     int which_block_y = min((int)(placeholder.y / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
     //assert here
-    assert((myInfo.start_row <= which_block_y) && (myInfo.end_row >= which_block_y));
-    assert((myInfo.start_col <= which_block_x) && (myInfo.end_col >= which_block_x));
+    //cout << RANK << ": " << placeholder.x << " " << placeholder.y << endl;
+    //assert((myInfo.start_row <= which_block_y) && (myInfo.end_row >= which_block_y));
+    //assert((myInfo.start_col <= which_block_x) && (myInfo.end_col >= which_block_x));
     //insert
-    myBlocks[which_block_y - myInfo.start_col][which_block_x].particles.push_back(placeholder);
+    myBlocks[which_block_y - myInfo.start_row][which_block_x - myInfo.start_col].particles.push_back(placeholder);
   }
-
   if (DEBUG == 2){
     printf("Processor %d: Finish polling particles from all other processes \n", RANK);
   }
@@ -296,14 +289,14 @@ void move_particles(){
   vector<vector<Block> > oldBlocks = myBlocks;
   //clear everything
   for (int i = 0; i <= myInfo.end_row - myInfo.start_row; i++){
-    for (int j = myInfo.start_col; j <= myInfo.end_col; j++){
+    for (int j = 0; j <= myInfo.end_col - myInfo.start_col; j++){
       myBlocks[i][j].particles.clear();
     }
   }
   //loop through the old block
   for (int i = 0; i <= myInfo.end_row - myInfo.start_row; i++){
-    for (int j = myInfo.start_col; j <= myInfo.end_col; j++){
-      Block oldBlock = oldBlocks[i][j];
+    for (int j = 0; j <= myInfo.end_col - myInfo.start_col; j++){
+      Block& oldBlock = oldBlocks[i][j];
       for (int k = 0; k < oldBlock.particles.size(); k++){
         double old_x = oldBlock.particles[k].x;
         double old_y = oldBlock.particles[k].y;
@@ -314,13 +307,10 @@ void move_particles(){
       }
     }
   }
-  //let all the processes excluding itself knows that it is done
+  //let all the processes including itself knows that it is done
   MPI_Request request;
-  particle_t termiate_symbol;
-  termiate_symbol.x = -1;
-  termiate_symbol.y = -1;
   for (int proc = 0; proc < NUM_PROC; proc++){
-    MPI_Isend(&termiate_symbol, 1, PARTICLE, proc, TRANSFER_PARTICLE_TAG, MPI_COMM_WORLD, &request);
+    MPI_Isend(&TERMINATE_SYMBOL, 1, PARTICLE, proc, TRANSFER_PARTICLE_TAG, MPI_COMM_WORLD, &request);
   }
   //polling for the particles we need
   poll_particles(TRANSFER_PARTICLE_TAG);
@@ -329,9 +319,144 @@ void move_particles(){
     printf("Process %d: Finish moving particles \n", RANK);
 }
 
+//Called in compute_force_grid
+void compute_force_between_blocks(Block& block_A, Block& block_B, int& navg, double& davg, double& dmin){
+  for (vector<particle_t>::iterator it_A = block_A.particles.begin(); it_A != block_A.particles.end(); it_A++){
+    for (std::vector<particle_t>::iterator it_B = block_B.particles.begin(); it_B != block_B.particles.end(); it_B++){
+      apply_force(*it_A, *it_B, &dmin, &davg, &navg);
+    }
+  }
+}
 
+//Called in compute_force_grid
+void compute_force_within_block(Block& block, int& navg, double& davg, double& dmin){
+    for (vector<particle_t>::iterator it_1 = block.particles.begin(); it_1 != block.particles.end(); it_1++){
+      for (vector<particle_t>::iterator it_2 = block.particles.begin(); it_2 != block.particles.end(); it_2++){
+        apply_force(*it_1, *it_2, &dmin, &davg, &navg);
+      }
+    }
+}
 
+//compute force within myblocks
+//Called in simulate_particles
+void compute_force_grid(int& navg, double& davg, double& dmin){
+  ClusterInfo myInfo = cluster_layout[RANK];
+  for (int i = 0; i <= myInfo.end_row - myInfo.start_row; i++){
+    for (int j = 0; j <= myInfo.end_col - myInfo.start_col; j++){
 
+      int navg_ = 0;
+      double davg_ = 0.0;
+
+      //set acceleration to zero
+      for (vector<particle_t>::iterator it = myBlocks[i][j].particles.begin(); it != myBlocks[i][j].particles.end(); it++){
+        it->ax = it->ay = 0;
+      }
+
+      //check top
+      if (i != 0){
+        compute_force_between_blocks(myBlocks[i][j], myBlocks[i-1][j], navg_, davg_, dmin);
+      }else if (i == 0 && myInfo.start_row != 0){
+        compute_force_between_blocks(myBlocks[i][j], topEdge[j], navg_, davg_, dmin);
+      }
+      //check bot
+      if (i != myInfo.end_row - myInfo.start_row){
+        compute_force_between_blocks(myBlocks[i][j], myBlocks[i+1][j], navg_, davg_, dmin);
+      }else if (i == myInfo.end_row - myInfo.start_row && myInfo.end_row != NUM_BLOCKS_PER_DIM - 1){
+        compute_force_between_blocks(myBlocks[i][j], botEdge[j], navg_, davg_, dmin);
+      }
+      //check diagonal left top
+      if (j == 0){
+      }else if (i == 0 && myInfo.start_row != 0){
+        compute_force_between_blocks(myBlocks[i][j], topEdge[j-1], navg_, davg_, dmin);
+      }else if (i != 0 && j != 0){
+        compute_force_between_blocks(myBlocks[i][j], myBlocks[i-1][j-1], navg_, davg_, dmin);
+      }
+      //check diagonal left bot
+      if (j == 0){
+      }else if (i == myInfo.end_row - myInfo.start_row && myInfo.end_row != NUM_BLOCKS_PER_DIM - 1){
+        compute_force_between_blocks(myBlocks[i][j], botEdge[j-1], navg_, davg_, dmin);
+      }else if (i != myInfo.end_row - myInfo.start_row && j != 0){
+        compute_force_between_blocks(myBlocks[i][j], myBlocks[i+1][j-1], navg_, davg_, dmin);
+      }
+      //check diagonal right top
+      if (j == myInfo.end_col - myInfo.start_col){
+      }else if (i == 0 && myInfo.start_row != 0){
+        compute_force_between_blocks(myBlocks[i][j], topEdge[j+1], navg_, davg_, dmin);
+      }else if (i != 0 && j != myInfo.end_col - myInfo.start_col){
+        compute_force_between_blocks(myBlocks[i][j], myBlocks[i-1][j+1], navg_, davg_, dmin);
+      }
+      //check diagonal right bot
+      if (j == myInfo.end_col - myInfo.start_col){
+      }else if (i == myInfo.end_row - myInfo.start_row && myInfo.end_row != NUM_BLOCKS_PER_DIM - 1){
+        compute_force_between_blocks(myBlocks[i][j], botEdge[j+1], navg_, davg_, dmin);
+      }else if (i != myInfo.end_row - myInfo.start_row && j != myInfo.end_col - myInfo.start_col){
+        compute_force_between_blocks(myBlocks[i][j], myBlocks[i+1][j+1], navg_, davg_, dmin);
+      }
+      //check left
+      if (j != 0){
+        compute_force_between_blocks(myBlocks[i][j], myBlocks[i][j-1], navg_, davg_, dmin);
+      }
+      //check right
+      if (j != myInfo.end_col - myInfo.start_col){
+        compute_force_between_blocks(myBlocks[i][j], myBlocks[i][j+1], navg_, davg_, dmin);
+      }
+
+      //compute within itself
+      compute_force_within_block(myBlocks[i][j], navg_, davg_, dmin);
+      navg += navg_;
+      davg += davg_;
+    }
+  }
+}
+
+/*-----------------Simulate Function---------------------*/
+void simulate_particles(char** argv, int argc, particle_t* particles, int n,
+    int& navg, double& davg, double& dmin, double& rdavg, double& rdmin,
+      int& rnavg, int& nabsavg, double& absavg, double& absmin){
+
+  TERMINATE_SYMBOL.x = -1.0;
+  TERMINATE_SYMBOL.y = -1.0;
+
+  if(RANK == MASTER){
+    master_routine(particles, n);
+  }else{
+    receive_metaData_from_master(MASTER);
+    receive_clusterInfo_from_master(MASTER);
+    receive_blocks_from_master(MASTER, BLOCKS_INITIALIZATION_TAG);
+  }
+
+  //debug
+  if (DEBUG){
+    printSummary();
+    printBlocks();
+  }
+  for( int step = 0; step < NSTEPS; step++ ){
+    navg = 0;
+    dmin = 1.0;
+    davg = 0.0;
+
+    //printf("Processor %d: Step %d begins 1 \n", RANK, step);
+    request_and_feed_edges(REQUEST_AND_FEED_EDGES_TAG);
+    //printf("Processor %d: Step %d begins 2 \n", RANK, step);
+    compute_force_grid(navg, davg, dmin);
+    //printf("Processor %d: Step %d begins 3 \n", RANK, step);
+    move_particles();
+    //printf("Processor %d: Step %d begins 4 \n", RANK, step);
+
+    if( find_option( argc, argv, "-no" ) == -1 ){
+      MPI_Reduce(&davg,&rdavg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+      MPI_Reduce(&navg,&rnavg,1,MPI_INT,MPI_SUM,0,MPI_COMM_WORLD);
+      MPI_Reduce(&dmin,&rdmin,1,MPI_DOUBLE,MPI_MIN,0,MPI_COMM_WORLD);
+      if (RANK == MASTER){
+        if (rnavg) {
+          absavg +=  rdavg/rnavg;
+          nabsavg++;
+        }
+        if (rdmin < absmin) absmin = rdmin;
+      }
+    }
+  }
+}
 
 int main( int argc, char **argv )
 {
@@ -354,6 +479,8 @@ int main( int argc, char **argv )
     int n = read_int( argc, argv, "-n", 1000 );
     char *savename = read_string( argc, argv, "-o", NULL );
     char *sumname = read_string( argc, argv, "-s", NULL );
+    FILE *fsave = savename && RANK == 0 ? fopen( savename, "w" ) : NULL;
+    FILE *fsum = sumname && RANK == 0 ? fopen ( sumname, "a" ) : NULL;
 
     //set up MPI
     MPI_Init( &argc, &argv );
@@ -372,26 +499,35 @@ int main( int argc, char **argv )
     particle_t *particles = (particle_t*) malloc( n * sizeof(particle_t) );
     set_size( n );
 
-    if(RANK == MASTER){
-      master_routine(particles, n);
-    }else{
-      receive_metaData_from_master(MASTER);
-      receive_clusterInfo_from_master(MASTER);
-      receive_blocks_from_master(MASTER, BLOCKS_INITIALIZATION_TAG);
-    }
+    double simulation_time = read_timer();
+    simulate_particles(argv, argc, particles, n, navg, davg, dmin, rdavg, rdmin, rnavg, nabsavg, absavg, absmin);
+    simulation_time = read_timer( ) - simulation_time;
 
-    //debug
-    if (DEBUG){
-      printSummary();
-      printBlocks();
+    if (RANK == MASTER) {
+      printf( "n = %d, simulation time = %g seconds", n, simulation_time);
+      if( find_option( argc, argv, "-no" ) == -1 ){
+        if (nabsavg){
+          absavg /= nabsavg;
+        }
+        //
+        //  -The minimum distance absmin between 2 particles during the run of the simulation
+        //  -A Correct simulation will have particles stay at greater than 0.4 (of cutoff) with typical values between .7-.8
+        //  -A simulation where particles don't interact correctly will be less than 0.4 (of cutoff) with typical values between .01-.05
+        //
+        //  -The average distance absavg is ~.95 when most particles are interacting correctly and ~.66 when no particles are interacting
+        //
+        printf( ", absmin = %lf, absavg = %lf", absmin, absavg);
+        if (absmin < 0.4) printf ("\nThe minimum distance is below 0.4 meaning that some particle is not interacting");
+        if (absavg < 0.8) printf ("\nThe average distance is below 0.8 meaning that most particles are not interacting");
+      }
+      printf("\n");
+      if( fsum)
+        fprintf(fsum,"%d %d %g\n",n,NUM_PROC,simulation_time);
     }
-
-    request_and_feed_edges(REQUEST_AND_FEED_EDGES_TAG);
-    move_particles();
-
-    if (DEBUG){
-      printBlocks();
-    }
+    if ( fsum )
+        fclose( fsum );
+    if( fsave )
+        fclose( fsave );
 
     free( particles );
 

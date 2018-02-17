@@ -19,7 +19,7 @@ using namespace std;
 #define END_OF_TRANSMISSION_TAG 5
 
 #define MASTER 0
-#define MAX_RECV_BUFFER_SIZE 100 //1000 particle data type
+#define MAX_RECV_BUFFER_SIZE 1000 //1000 particle data type
 #define DEBUG 1
 
 //define some datatype
@@ -85,6 +85,8 @@ int NUM_PROC = -1;
 int RANK = -1;
 ClusterInfo myClusterInfo;
 
+particle_t TERMINATE_SYMBOL;
+
 vector<vector<Block> > myBlocks;
 vector<Block> topEdge;
 vector<Block> botEdge;
@@ -130,4 +132,14 @@ void printBlocks(){
       printf("\n");
   }
   printf("Processor %d: Total %d particles------------------------------- \n", RANK, count);
+}
+
+void printParticles(particle_t* particles, int n){
+  for (int i = 0; i < n; i++){
+    cout << particles[i].x << " " << particles[i].y << endl;
+  }
+}
+
+void printParticle(particle_t particle){
+  cout << particle.x << " " << particle.y << endl;
 }
