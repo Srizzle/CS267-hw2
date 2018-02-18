@@ -221,9 +221,10 @@ void request_and_feed_edges(int tag){
 }
 
 //send particle to another block on a separate processor
-void transfer_particle(particle_t& particle, int recepient, int tag){
+MPI_Request transfer_particle(particle_t& particle, int recepient, int tag){
   MPI_Request request;
   MPI_Isend(&particle, 1, PARTICLE, recepient, tag, MPI_COMM_WORLD, &request);
+  return request;
 }
 
 //decide memmbership;
@@ -232,22 +233,24 @@ void transfer_particle(particle_t& particle, int recepient, int tag){
 2. Membership changed to another block within the processor.
 3. Membership changed to another block outside the processor
 */
-void decide_membership(Block& currentBlock, double old_x, double old_y, particle_t& particle){
+MPI_Request decide_membership(Block& currentBlock, double old_x, double old_y, particle_t& particle){
   ClusterInfo myInfo = cluster_layout[RANK];
   int which_block_x_old = min((int)(old_x / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
   int which_block_y_old = min((int)(old_y / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
   int which_block_x = min((int)(particle.x / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
   int which_block_y = min((int)(particle.y / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
 
-  //assert((myInfo.start_row <= which_block_y_old) && (myInfo.end_row >= which_block_y_old));
-  //assert((myInfo.start_col <= which_block_x_old) && (myInfo.end_col >= which_block_x_old));
+  assert((myInfo.start_row <= which_block_y_old) && (myInfo.end_row >= which_block_y_old));
+  assert((myInfo.start_col <= which_block_x_old) && (myInfo.end_col >= which_block_x_old));
 
+  MPI_Request request = NULL;
   if (which_block_x_old != which_block_x || which_block_y_old != which_block_y){
-    transfer_particle(particle, locateRecipient(which_block_x, which_block_y), TRANSFER_PARTICLE_TAG);
+    request = transfer_particle(particle, locateRecipient(which_block_x, which_block_y), TRANSFER_PARTICLE_TAG);
   }else{
     //case 1
     currentBlock.particles.push_back(particle);
   }
+  return request;
 }
 
 
@@ -272,9 +275,8 @@ void poll_particles(int tag){
     int which_block_x = min((int)(placeholder.x / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
     int which_block_y = min((int)(placeholder.y / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
     //assert here
-    //cout << RANK << ": " << placeholder.x << " " << placeholder.y << endl;
-    //assert((myInfo.start_row <= which_block_y) && (myInfo.end_row >= which_block_y));
-    //assert((myInfo.start_col <= which_block_x) && (myInfo.end_col >= which_block_x));
+    assert((myInfo.start_row <= which_block_y) && (myInfo.end_row >= which_block_y));
+    assert((myInfo.start_col <= which_block_x) && (myInfo.end_col >= which_block_x));
     //insert
     myBlocks[which_block_y - myInfo.start_row][which_block_x - myInfo.start_col].particles.push_back(placeholder);
   }
@@ -287,6 +289,7 @@ void poll_particles(int tag){
 void move_particles(){
   ClusterInfo myInfo = cluster_layout[RANK];
   vector<vector<Block> > oldBlocks = myBlocks;
+  vector<MPI_Request> requests;
   //clear everything
   for (int i = 0; i <= myInfo.end_row - myInfo.start_row; i++){
     for (int j = 0; j <= myInfo.end_col - myInfo.start_col; j++){
@@ -303,18 +306,23 @@ void move_particles(){
         //update position
         move(oldBlock.particles[k]);
         //check if the particle might move to another block
-        decide_membership(myBlocks[i][j], old_x, old_y, oldBlock.particles[k]);
+        MPI_Request request = decide_membership(myBlocks[i][j], old_x, old_y, oldBlock.particles[k]);
+        if (request != NULL){
+          requests.push_back(request);
+        }
       }
     }
   }
   //let all the processes including itself knows that it is done
-  MPI_Request request;
   for (int proc = 0; proc < NUM_PROC; proc++){
+    MPI_Request request;
     MPI_Isend(&TERMINATE_SYMBOL, 1, PARTICLE, proc, TRANSFER_PARTICLE_TAG, MPI_COMM_WORLD, &request);
+    requests.push_back(request);
   }
   //polling for the particles we need
   poll_particles(TRANSFER_PARTICLE_TAG);
 
+  MPI_Waitall(requests.size(), &requests.front(), MPI_STATUSES_IGNORE);
   if (DEBUG == 2)
     printf("Process %d: Finish moving particles \n", RANK);
 }
@@ -435,13 +443,10 @@ void simulate_particles(char** argv, int argc, particle_t* particles, int n,
     dmin = 1.0;
     davg = 0.0;
 
-    //printf("Processor %d: Step %d begins 1 \n", RANK, step);
+    //printf("Processor %d: Step %d\n", RANK, step);
     request_and_feed_edges(REQUEST_AND_FEED_EDGES_TAG);
-    //printf("Processor %d: Step %d begins 2 \n", RANK, step);
     compute_force_grid(navg, davg, dmin);
-    //printf("Processor %d: Step %d begins 3 \n", RANK, step);
     move_particles();
-    //printf("Processor %d: Step %d begins 4 \n", RANK, step);
 
     if( find_option( argc, argv, "-no" ) == -1 ){
       MPI_Reduce(&davg,&rdavg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
@@ -458,8 +463,7 @@ void simulate_particles(char** argv, int argc, particle_t* particles, int n,
   }
 }
 
-int main( int argc, char **argv )
-{
+int main( int argc, char **argv ){
     int navg, nabsavg=0;
     double dmin, absmin=1.0,davg,absavg=0.0;
     double rdavg,rdmin;

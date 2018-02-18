@@ -1,0 +1,8 @@
+# Start an interactive job for ten minutes
+salloc -N 1 -t 10:00 -q debug --qos=interactive -C haswell --cpu-freq=2300000
+
+# Run the BLAS executable like in the batch file job-blas.
+export MKL_NUM_THREADS=1
+srun -N 1 -n 1 ./benchmark-blas
+
+exit
