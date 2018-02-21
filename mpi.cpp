@@ -4,17 +4,6 @@ using namespace std;
 /*-----------------------------------------------Master Method--------------------------------------------*/
 //figure out the overall span
 double findSize(particle_t* particles, int n){
-  double min_x = 1 << 30;
-  double min_y = 1 << 30;
-  double max_x = -1;
-  double max_y = -1;
-  for (int i = 0; i < n; i++){
-      min_x = min(particles[i].x, min_x);
-      max_x = max(particles[i].x, max_x);
-      min_y = min(particles[i].y, min_y);
-      max_y = max(particles[i].y, max_y);
-  }
-  double size = max(max_x - min_x, max_y - min_y);
   return size;
 }
 
@@ -64,7 +53,7 @@ void dispense_blocks(vector<ClusterInfo> clusterInfo, vector<vector<Block> > gri
   //iterate through the ClusterInfo
   for (int i = 1; i < clusterInfo.size(); i++){
     //it is not initialized
-    if (clusterInfo[i].start_row == -1)
+    if (!isValidCluster(i))
       continue;
     //send blocks to the correpsonding processor
     for (int which_row = clusterInfo[i].start_row; which_row <= clusterInfo[i].end_row; which_row++){
@@ -73,8 +62,6 @@ void dispense_blocks(vector<ClusterInfo> clusterInfo, vector<vector<Block> > gri
           i, BLOCKS_INITIALIZATION_TAG, MPI_COMM_WORLD);
       }
     }
-    // printf("Master send %d particles in Block [%d, %d] to %d process \n",
-    //        grid[clusterInfo[i].end_row][clusterInfo[i].end_col].particles.size(), clusterInfo[i].end_row, clusterInfo[i].end_col, i);
   }
   //MPI_Waitall(count, req, MPI_STATUSES_IGNORE);
 }
@@ -97,11 +84,11 @@ void master_routine(particle_t* particles, int n){
   //find the size
   GRID_SIZE = findSize(particles, n);
   //generate the important constants
-  NUM_BLOCKS_PER_DIM = int(sqrt(ceil(n/64.0)*64)) ;
+  NUM_BLOCKS_PER_DIM = int(sqrt(ceil(n/64.0)*32)) ;
   BLOCK_SIZE = GRID_SIZE / NUM_BLOCKS_PER_DIM;
   NUM_PARTICLES = n;
   if (BLOCK_SIZE < 0.01){
-    NUM_BLOCKS_PER_DIM = int(GRID_SIZE /  CUT_OFF);
+    NUM_BLOCKS_PER_DIM = max(1,int(GRID_SIZE /  CUT_OFF));
     BLOCK_SIZE = GRID_SIZE / NUM_BLOCKS_PER_DIM;
   }
   //broadcast metadata
@@ -160,7 +147,7 @@ void request_and_feed_edges(int tag){
   /* ---------------------------------- Send out my edges ----------------------------------*/
   int recepient = -1;
   //send top edge
-  if (RANK != 0){
+  if (isValidCluster(RANK) && !isFirstCluster(RANK)){
     recepient = RANK - 1;
     for (int col = 0; col <= myInfo.end_col - myInfo.start_col; col++){
       MPI_Request request;
@@ -172,7 +159,7 @@ void request_and_feed_edges(int tag){
     }
   }
   //send bot edge
-  if (RANK != NUM_PROC - 1){
+  if (isValidCluster(RANK) && !isLastCluster(RANK)){
     recepient = RANK + 1;
     for (int col = 0; col <= myInfo.end_col - myInfo.start_col; col++){
       MPI_Request request;
@@ -191,7 +178,7 @@ void request_and_feed_edges(int tag){
   topEdge.clear();
   botEdge.clear();
   //receive top edge
-  if (RANK != 0){
+  if (isValidCluster(RANK) && !isFirstCluster(RANK)){
     sender = RANK - 1;
     for (int col = 0; col <= myInfo.end_col  - myInfo.start_col; col++){
       vector<particle_t> buffer(MAX_RECV_BUFFER_SIZE, particle_t());
@@ -205,7 +192,7 @@ void request_and_feed_edges(int tag){
     }
   }
   //receive bot edge
-  if (RANK != NUM_PROC-1){
+  if (isValidCluster(RANK) && !isLastCluster(RANK)){
     sender = RANK + 1;
     for (int col = 0; col <= myInfo.end_col - myInfo.start_col; col++){
       vector<particle_t> buffer(MAX_RECV_BUFFER_SIZE, particle_t());
@@ -240,8 +227,10 @@ MPI_Request decide_membership(Block& currentBlock, double old_x, double old_y, p
   int which_block_x = min((int)(particle.x / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
   int which_block_y = min((int)(particle.y / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
 
-  assert((myInfo.start_row <= which_block_y_old) && (myInfo.end_row >= which_block_y_old));
-  assert((myInfo.start_col <= which_block_x_old) && (myInfo.end_col >= which_block_x_old));
+  if (DEBUG){
+    assert((myInfo.start_row <= which_block_y_old) && (myInfo.end_row >= which_block_y_old));
+    assert((myInfo.start_col <= which_block_x_old) && (myInfo.end_col >= which_block_x_old));
+  }
 
   MPI_Request request = NULL;
   if (which_block_x_old != which_block_x || which_block_y_old != which_block_y){
@@ -275,8 +264,11 @@ void poll_particles(int tag){
     int which_block_x = min((int)(placeholder.x / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
     int which_block_y = min((int)(placeholder.y / BLOCK_SIZE), NUM_BLOCKS_PER_DIM - 1);
     //assert here
-    assert((myInfo.start_row <= which_block_y) && (myInfo.end_row >= which_block_y));
-    assert((myInfo.start_col <= which_block_x) && (myInfo.end_col >= which_block_x));
+    if (DEBUG){
+        assert((myInfo.start_row <= which_block_y) && (myInfo.end_row >= which_block_y));
+        assert((myInfo.start_col <= which_block_x) && (myInfo.end_col >= which_block_x));
+    }
+
     //insert
     myBlocks[which_block_y - myInfo.start_row][which_block_x - myInfo.start_col].particles.push_back(placeholder);
   }
@@ -420,7 +412,7 @@ void compute_force_grid(int& navg, double& davg, double& dmin){
 /*-----------------Simulate Function---------------------*/
 void simulate_particles(char** argv, int argc, particle_t* particles, int n,
     int& navg, double& davg, double& dmin, double& rdavg, double& rdmin,
-      int& rnavg, int& nabsavg, double& absavg, double& absmin){
+      int& rnavg, int& nabsavg, double& absavg, double& absmin, FILE* fsave){
 
   TERMINATE_SYMBOL.x = -1.0;
   TERMINATE_SYMBOL.y = -1.0;
@@ -442,6 +434,10 @@ void simulate_particles(char** argv, int argc, particle_t* particles, int n,
     navg = 0;
     dmin = 1.0;
     davg = 0.0;
+
+    if( find_option( argc, argv, "-no" ) == -1 )
+      if( fsave && (step%SAVEFREQ) == 0 )
+        save( fsave, n, particles );
 
     //printf("Processor %d: Step %d\n", RANK, step);
     request_and_feed_edges(REQUEST_AND_FEED_EDGES_TAG);
@@ -483,8 +479,7 @@ int main( int argc, char **argv ){
     int n = read_int( argc, argv, "-n", 1000 );
     char *savename = read_string( argc, argv, "-o", NULL );
     char *sumname = read_string( argc, argv, "-s", NULL );
-    FILE *fsave = savename && RANK == 0 ? fopen( savename, "w" ) : NULL;
-    FILE *fsum = sumname && RANK == 0 ? fopen ( sumname, "a" ) : NULL;
+    
 
     //set up MPI
     MPI_Init( &argc, &argv );
@@ -503,8 +498,11 @@ int main( int argc, char **argv ){
     particle_t *particles = (particle_t*) malloc( n * sizeof(particle_t) );
     set_size( n );
 
+    FILE *fsave = savename && RANK == 0 ? fopen( savename, "w" ) : NULL;
+    FILE *fsum = sumname && RANK == 0 ? fopen ( sumname, "a" ) : NULL;
+    
     double simulation_time = read_timer();
-    simulate_particles(argv, argc, particles, n, navg, davg, dmin, rdavg, rdmin, rnavg, nabsavg, absavg, absmin);
+    simulate_particles(argv, argc, particles, n, navg, davg, dmin, rdavg, rdmin, rnavg, nabsavg, absavg, absmin, fsave);
     simulation_time = read_timer( ) - simulation_time;
 
     if (RANK == MASTER) {

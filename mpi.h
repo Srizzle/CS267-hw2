@@ -19,8 +19,10 @@ using namespace std;
 #define END_OF_TRANSMISSION_TAG 5
 
 #define MASTER 0
-#define MAX_RECV_BUFFER_SIZE 1000 //1000 particle data type
-#define DEBUG 1
+#define MAX_RECV_BUFFER_SIZE 500 //50 particle data type
+#define DEBUG 0
+
+extern double size;
 
 //define some datatype
 MPI_Datatype PARTICLE;
@@ -83,6 +85,7 @@ double CUT_OFF = 0.01;
 int NUM_PARTICLES = -1;
 int NUM_PROC = -1;
 int RANK = -1;
+int NUM_ACTIVE_PROC = -1;
 ClusterInfo myClusterInfo;
 
 particle_t TERMINATE_SYMBOL;
@@ -110,6 +113,21 @@ int locateRecipient(int x, int y){
   }
   return -1;
 }
+
+bool isValidCluster(int rank){
+    ClusterInfo thisCluster = cluster_layout[rank];
+    if (thisCluster.start_row <= thisCluster.end_row && thisCluster.end_row >=0)
+        return true;
+}
+
+bool isFirstCluster(int rank){
+    return (cluster_layout[rank].start_row == 0) && isValidCluster(rank);
+}
+
+bool isLastCluster(int rank){
+    return (cluster_layout[rank].end_row == NUM_BLOCKS_PER_DIM - 1) && isValidCluster(rank);
+}
+
 
 void printSummary(){
   printf("Processor %d: GRID_SIZE %f, BLOCK_SIZE %f, NUM_BLOCKS_PER_DIM %d, NUM_PARTICLES %d \n",
