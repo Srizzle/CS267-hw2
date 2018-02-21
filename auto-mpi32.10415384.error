@@ -1,0 +1,34 @@
+rm: cannot remove 'mpi.txt': No such file or directory
+srun: fatal: Can not execute ./serial
+/var/spool/slurmd/job10415384/slurm_script: line 11: 36947 Aborted                 srun -n 1 -N 1 ./serial -n 500 -no -s mpi.txt
+srun: fatal: Can not execute ./mpi
+/var/spool/slurmd/job10415384/slurm_script: line 12: 36948 Aborted                 srun -n 1 -N 1 ./mpi -p 1 -n 500 -no -s mpi.txt
+srun: fatal: Can not execute ./mpi
+/var/spool/slurmd/job10415384/slurm_script: line 13: 36949 Aborted                 srun -n 2 -N 2 ./mpi -p 2 -n 500 -no -s mpi.txt
+srun: fatal: Can not execute ./mpi
+/var/spool/slurmd/job10415384/slurm_script: line 14: 36950 Aborted                 srun -n 4 -N 4 ./mpi -p 4 -n 500 -no -s mpi.txt
+srun: fatal: Can not execute ./mpi
+/var/spool/slurmd/job10415384/slurm_script: line 15: 36951 Aborted                 srun -n 6 -N 6 ./mpi -p 6 -n 500 -no -s mpi.txt
+srun: fatal: Can not execute ./mpi
+/var/spool/slurmd/job10415384/slurm_script: line 16: 36952 Aborted                 srun -n 12 -N 12 ./mpi -p 12 -n 500 -no -s mpi.txt
+srun: fatal: Can not execute ./mpi
+/var/spool/slurmd/job10415384/slurm_script: line 17: 36953 Aborted                 srun -n 16 -N 16 ./mpi -p 16 -n 500 -no -s mpi.txt
+srun: fatal: Can not execute ./mpi
+/var/spool/slurmd/job10415384/slurm_script: line 18: 36954 Aborted                 srun -n 24 -N 24 ./mpi -p 24 -n 500 -no -s mpi.txt
+srun: fatal: Can not execute ./mpi
+/var/spool/slurmd/job10415384/slurm_script: line 19: 36955 Aborted                 srun -n 32 -N 32 ./mpi -p 32 -n 500 -no -s mpi.txt
+srun: fatal: Can not execute ./mpi
+/var/spool/slurmd/job10415384/slurm_script: line 20: 36956 Aborted                 srun -n 2 -N 2 ./mpi -p 2 -n 1000 -no -s mpi.txt
+srun: fatal: Can not execute ./mpi
+/var/spool/slurmd/job10415384/slurm_script: line 21: 36957 Aborted                 srun -n 4 -N 4 ./mpi -p 4 -n 2000 -no -s mpi.txt
+srun: fatal: Can not execute ./mpi
+/var/spool/slurmd/job10415384/slurm_script: line 22: 36958 Aborted                 srun -n 6 -N 6 ./mpi -p 6 -n 3000 -no -s mpi.txt
+srun: fatal: Can not execute ./mpi
+/var/spool/slurmd/job10415384/slurm_script: line 23: 36959 Aborted                 srun -n 12 -N 12 ./mpi -p 12 -n 6000 -no -s mpi.txt
+srun: fatal: Can not execute ./mpi
+/var/spool/slurmd/job10415384/slurm_script: line 24: 36960 Aborted                 srun -n 16 -N 16 ./mpi -p 16 -n 8000 -no -s mpi.txt
+srun: fatal: Can not execute ./mpi
+/var/spool/slurmd/job10415384/slurm_script: line 25: 36961 Aborted                 srun -n 24 -N 24 ./mpi -p 24 -n 12000 -no -s mpi.txt
+srun: fatal: Can not execute ./mpi
+/var/spool/slurmd/job10415384/slurm_script: line 26: 36962 Aborted                 srun -n 32 -N 32 ./mpi -p 32 -n 16000 -no -s mpi.txt
+/var/spool/slurmd/job10415384/slurm_script: line 27: ./autograder: No such file or directory
