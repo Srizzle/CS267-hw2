@@ -35,4 +35,4 @@ common.o: common.cpp common.h
 	$(CC) -c $(CFLAGS)  $(OPENMP) common.cpp
 
 clean:
-	rm -f *.o $(TARGETS) *.stdout *.txt
+	rm -f *.o $(TARGETS) *.stdout *.error *.txt

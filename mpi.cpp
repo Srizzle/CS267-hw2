@@ -24,6 +24,7 @@ vector<vector<Block> > initializeGrid(particle_t* particles, int n){
 //Called once to initialize which processor is reponsible for which blocks/rows of grid
 vector<ClusterInfo> initializeClusterInfos(int NUM_PROC){
   vector<ClusterInfo> clusterInfo = vector<ClusterInfo>();
+  /*
   int row_stride = ceil(NUM_BLOCKS_PER_DIM / double(NUM_PROC));
   for (int start_row = 0; start_row < NUM_BLOCKS_PER_DIM; start_row += row_stride){
     int end_row = min(start_row + row_stride - 1, NUM_BLOCKS_PER_DIM - 1);
@@ -31,6 +32,25 @@ vector<ClusterInfo> initializeClusterInfos(int NUM_PROC){
     int end_col = NUM_BLOCKS_PER_DIM - 1;
     clusterInfo.push_back(ClusterInfo(start_row, end_row, start_col, end_col));
   }
+  */
+
+  int count = 0;
+  int start_row = 0;
+  int row_stride = (NUM_BLOCKS_PER_DIM / double(NUM_PROC));
+  while (start_row < NUM_BLOCKS_PER_DIM && count < NUM_PROC){
+    int end_row = start_row + row_stride - 1;
+    if ((NUM_BLOCKS_PER_DIM - start_row) / (double)(NUM_PROC - count) > row_stride){
+        end_row++;
+    }
+    end_row = min(end_row, NUM_BLOCKS_PER_DIM - 1);
+    int start_col = 0;
+    int end_col = NUM_BLOCKS_PER_DIM - 1;
+    clusterInfo.push_back(ClusterInfo(start_row, end_row, start_col, end_col));
+    count++;
+    start_row = end_row + 1;
+  }
+
+
   for (int i = clusterInfo.size(); i < NUM_PROC; i++){
     clusterInfo.push_back(ClusterInfo(-1,-2,-1,-2));
   }
@@ -39,7 +59,7 @@ vector<ClusterInfo> initializeClusterInfos(int NUM_PROC){
 
 //Called by the master, to dispense the blocks to the processors at really beginning
 void dispense_blocks(vector<ClusterInfo> clusterInfo, vector<vector<Block> > grid){
-  //MPI_Request req[NUM_BLOCKS_PER_D-IM *  NUM_BLOCKS_PER_DIM];
+  MPI_Request req[NUM_BLOCKS_PER_DIM *  NUM_BLOCKS_PER_DIM];
   int count = 0;
   //Directly put the data to master's own block
   for (int i = clusterInfo[MASTER].start_row; i <= clusterInfo[MASTER].end_row; i++){
@@ -58,12 +78,13 @@ void dispense_blocks(vector<ClusterInfo> clusterInfo, vector<vector<Block> > gri
     //send blocks to the correpsonding processor
     for (int which_row = clusterInfo[i].start_row; which_row <= clusterInfo[i].end_row; which_row++){
       for (int which_col = clusterInfo[i].start_col; which_col <= clusterInfo[i].end_col; which_col++){
-        MPI_Send(&grid[which_row][which_col].particles.front(), grid[which_row][which_col].particles.size(), PARTICLE,
-          i, BLOCKS_INITIALIZATION_TAG, MPI_COMM_WORLD);
+        MPI_Isend(&grid[which_row][which_col].particles.front(), grid[which_row][which_col].particles.size(), PARTICLE,
+          i, BLOCKS_INITIALIZATION_TAG, MPI_COMM_WORLD, &req[count]);
+        count++;
       }
     }
   }
-  //MPI_Waitall(count, req, MPI_STATUSES_IGNORE);
+  MPI_Waitall(count, req, MPI_STATUSES_IGNORE);
 }
 
 //Called by the master, to broadcast the metaData
@@ -177,32 +198,33 @@ void request_and_feed_edges(int tag){
   MPI_Status status;
   topEdge.clear();
   botEdge.clear();
-  //receive top edge
-  if (isValidCluster(RANK) && !isFirstCluster(RANK)){
-    sender = RANK - 1;
-    for (int col = 0; col <= myInfo.end_col  - myInfo.start_col; col++){
-      vector<particle_t> buffer(MAX_RECV_BUFFER_SIZE, particle_t());
-      MPI_Recv(&buffer.front(), MAX_RECV_BUFFER_SIZE, PARTICLE, sender, tag, MPI_COMM_WORLD, &status);
-      MPI_Get_count(&status, PARTICLE, &real_num_particles);
-      buffer.resize(real_num_particles);
-      topEdge.push_back(Block(buffer));
-      if (DEBUG == 3)
-        printf("Processor %d: Receive block [%d, %d] from Processor %d, with %d particles \n",
-          RANK, myInfo.start_row - 1, col, sender, topEdge[col].particles.size());
-    }
+
+  int num_blocks_should_recv = 0;
+  if (isValidCluster(RANK) && !isFirstCluster(RANK) && !isLastCluster(RANK)){
+    num_blocks_should_recv = 2 * (myInfo.end_col - myInfo.start_col + 1);
+  }else if (isFirstCluster(RANK) && !isLastCluster(RANK)){
+    num_blocks_should_recv = 1 * (myInfo.end_col - myInfo.start_col + 1);
+  }else if (isLastCluster(RANK) && !isFirstCluster(RANK)){
+    num_blocks_should_recv = 1 * (myInfo.end_col - myInfo.start_col + 1);
   }
-  //receive bot edge
-  if (isValidCluster(RANK) && !isLastCluster(RANK)){
-    sender = RANK + 1;
-    for (int col = 0; col <= myInfo.end_col - myInfo.start_col; col++){
-      vector<particle_t> buffer(MAX_RECV_BUFFER_SIZE, particle_t());
-      MPI_Recv(&buffer.front(), MAX_RECV_BUFFER_SIZE, PARTICLE, sender, tag, MPI_COMM_WORLD, &status);
-      MPI_Get_count(&status, PARTICLE, &real_num_particles);
-      buffer.resize(real_num_particles);
-      botEdge.push_back(Block(buffer));
-      if (DEBUG == 3)
-        printf("Processor %d: Receive block [%d, %d] from Processor %d, with %d particles \n",
-          RANK, myInfo.end_row + 1, col, sender, botEdge[col].particles.size());
+
+  int topEdge_count = 0;
+  int botEdge_count = 0;
+
+  while (topEdge_count + botEdge_count < num_blocks_should_recv){
+    vector<particle_t> buffer(MAX_RECV_BUFFER_SIZE, particle_t());
+    MPI_Recv(&buffer.front(), MAX_RECV_BUFFER_SIZE, PARTICLE, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
+    MPI_Get_count(&status, PARTICLE, &real_num_particles);
+    buffer.resize(real_num_particles);
+
+    if (status.MPI_SOURCE == RANK - 1){
+        topEdge.push_back(Block(buffer));
+        topEdge_count++;
+    }else if (status.MPI_SOURCE == RANK + 1){
+        botEdge.push_back(Block(buffer));
+        botEdge_count++;
+    }else{
+        printf("WARNING: %d RECEIVE FROM %d during the request_and_feed stage \n", RANK, status.MPI_SOURCE);
     }
   }
 }
@@ -479,7 +501,7 @@ int main( int argc, char **argv ){
     int n = read_int( argc, argv, "-n", 1000 );
     char *savename = read_string( argc, argv, "-o", NULL );
     char *sumname = read_string( argc, argv, "-s", NULL );
-    
+
 
     //set up MPI
     MPI_Init( &argc, &argv );
@@ -500,7 +522,7 @@ int main( int argc, char **argv ){
 
     FILE *fsave = savename && RANK == 0 ? fopen( savename, "w" ) : NULL;
     FILE *fsum = sumname && RANK == 0 ? fopen ( sumname, "a" ) : NULL;
-    
+
     double simulation_time = read_timer();
     simulate_particles(argv, argc, particles, n, navg, davg, dmin, rdavg, rdmin, rnavg, nabsavg, absavg, absmin, fsave);
     simulation_time = read_timer( ) - simulation_time;
