@@ -23,16 +23,8 @@ vector<vector<Block> > initializeGrid(particle_t* particles, int n){
 
 //Called once to initialize which processor is reponsible for which blocks/rows of grid
 vector<ClusterInfo> initializeClusterInfos(int NUM_PROC){
+
   vector<ClusterInfo> clusterInfo = vector<ClusterInfo>();
-  /*
-  int row_stride = ceil(NUM_BLOCKS_PER_DIM / double(NUM_PROC));
-  for (int start_row = 0; start_row < NUM_BLOCKS_PER_DIM; start_row += row_stride){
-    int end_row = min(start_row + row_stride - 1, NUM_BLOCKS_PER_DIM - 1);
-    int start_col = 0;
-    int end_col = NUM_BLOCKS_PER_DIM - 1;
-    clusterInfo.push_back(ClusterInfo(start_row, end_row, start_col, end_col));
-  }
-  */
 
   int count = 0;
   int start_row = 0;
@@ -105,7 +97,7 @@ void master_routine(particle_t* particles, int n){
   //find the size
   GRID_SIZE = findSize(particles, n);
   //generate the important constants
-  NUM_BLOCKS_PER_DIM = int(sqrt(ceil(n/64.0)*32)) ;
+  NUM_BLOCKS_PER_DIM = int(sqrt(ceil(n/64.0)*16)) ;
   BLOCK_SIZE = GRID_SIZE / NUM_BLOCKS_PER_DIM;
   NUM_PARTICLES = n;
   if (BLOCK_SIZE < 0.01){
@@ -256,7 +248,7 @@ MPI_Request decide_membership(Block& currentBlock, double old_x, double old_y, p
 
   MPI_Request request = NULL;
   if (which_block_x_old != which_block_x || which_block_y_old != which_block_y){
-    request = transfer_particle(particle, locateRecipient(which_block_x, which_block_y), TRANSFER_PARTICLE_TAG);
+    request = transfer_particle(particle, locateRecipient(which_block_x, which_block_y, RANK), TRANSFER_PARTICLE_TAG);
   }else{
     //case 1
     currentBlock.particles.push_back(particle);
@@ -448,10 +440,10 @@ void simulate_particles(char** argv, int argc, particle_t* particles, int n,
   }
 
   //debug
-  if (DEBUG){
-    printSummary();
-    printBlocks();
-  }
+  // if (DEBUG){
+  //   printSummary();
+  //   printBlocks();
+  // }
   for( int step = 0; step < NSTEPS; step++ ){
     navg = 0;
     dmin = 1.0;

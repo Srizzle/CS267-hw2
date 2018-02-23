@@ -19,7 +19,7 @@ using namespace std;
 #define END_OF_TRANSMISSION_TAG 5
 
 #define MASTER 0
-#define MAX_RECV_BUFFER_SIZE 500 //50 particle data type
+#define MAX_RECV_BUFFER_SIZE 100 //50 particle data type
 #define DEBUG 0
 
 extern double size;
@@ -106,12 +106,21 @@ bool withinRange(int rank, int x, int y){
   return true;
 }
 
-int locateRecipient(int x, int y){
-  for (int i = 0; i < NUM_PROC; i++){
-    if (withinRange(i, x, y))
-      return i;
-  }
-  return -1;
+int locateRecipient(int x, int y, int currentRank){
+    int left = currentRank, right = currentRank;
+    while (left >= 0 || right < NUM_PROC){
+        if (left >= 0){
+            if (withinRange(left, x, y))
+                return left;
+        }
+        if (right < NUM_PROC){
+            if (withinRange(right, x, y))
+                return right;
+        }
+        left--;
+        right++;
+    }
+    return -1;
 }
 
 bool isValidCluster(int rank){
