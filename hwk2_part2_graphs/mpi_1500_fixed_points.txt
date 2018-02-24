@@ -1,0 +1,8 @@
+n = 1500, simulation time = 0.284891 seconds
+n = 1500, simulation time = 0.196361 seconds
+n = 1500, simulation time = 0.183619 seconds
+n = 1500, simulation time = 0.164744 seconds
+n = 1500, simulation time = 0.139465 seconds
+n = 1500, simulation time = 0.158564 seconds
+n = 1500, simulation time = 0.14834 seconds
+n = 1500, simulation time = 0.169517 seconds

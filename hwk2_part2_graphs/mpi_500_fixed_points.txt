@@ -1,0 +1,8 @@
+n = 500, simulation time = 0.095706 seconds
+n = 500, simulation time = 0.07736 seconds
+n = 500, simulation time = 0.104709 seconds
+n = 500, simulation time = 0.078448 seconds
+n = 500, simulation time = 0.107769 seconds
+n = 500, simulation time = 0.080899 seconds
+n = 500, simulation time = 0.104492 seconds
+n = 500, simulation time = 0.096736 seconds
