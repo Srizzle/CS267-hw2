@@ -7,13 +7,13 @@
 #SBATCH -t 00:10:00
 #SBATCH -N 1         
 
-./gpu -n 500 
-./gpu -n 1000 
-./gpu -n 2000 
-./gpu -n 4000 
-./gpu -n 8000 
-./serial -n 500 
-./serial -n 1000 
-./serial -n 2000 
-./serial -n 4000 
-./serial -n 8000  
+./gpu -n 5000
+./gpu -n 10000 
+./gpu -n 20000
+./gpu -n 40000 
+./gpu -n 80000 
+./serial -n 5000 
+./serial -n 10000 
+./serial -n 20000 
+./serial -n 40000 
+./serial -n 80000  
