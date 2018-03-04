@@ -29,27 +29,21 @@ __device__ int FIND_POS_DEVICE(int i, int j, int stride){
 }
 
 struct Bin{
+  particle_t particles[MAX_BIN_SIZE];
   int ids[MAX_BIN_SIZE];
   int currentSize;
   Bin(){
     currentSize = 0;
   };
-  __host__ void addParticle_host(int id){
+  void addParticle(particle_t particle, int id){
     if (currentSize >= MAX_BIN_SIZE){
       printf("HOST WARNING: Not enough room in the bin, current size: %d\n", currentSize);
       return;
     }
+    particles[currentSize] = particle;
     ids[currentSize] = id;
     currentSize += 1;
   };
-  __device__ void addParticle_device(int id){
-    int old_pos = atomicAdd(&currentSize, 1);
-    if (old_pos >= MAX_BIN_SIZE){
-      printf("DEVICE WARNING: Not enough room in the bin, current size: %d\n", old_pos);
-      return;
-    }
-    ids[old_pos] = id;
-  }
 };
 
 //the length of each blocks
@@ -58,17 +52,29 @@ double BIN_SIZE = 0;
 double GRID_SIZE = 1;
 //number of blocks per dim, so the overall number of number of blocks is its square
 int NUM_BINS_PER_DIM = -1;
+
 //How many gpu_blocks to generate for gpus
 int NUM_GPU_BLOCKS = -1;
 
 
-inline void gpuAssert(cudaError_t code, char *file, int line, bool abort=true){
-   if (code != cudaSuccess){
+inline void gpuAssert(cudaError_t code, char *file, int line, bool abort=true)
+{
+   if (code != cudaSuccess)
+   {
       fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
       if (abort) exit(code);
    }
 }
 
+__device__ void addParticle(Bin& bin, particle_t p, int id){
+  int old_pos = atomicAdd(&(bin.currentSize), 1);
+  if (old_pos >= MAX_BIN_SIZE){
+    printf("DEVICE WARNING: Not enough room in the bin, current size: %d\n", old_pos);
+    return;
+  }
+  bin.particles[old_pos] = p;
+  bin.ids[old_pos] = id;
+};
 
 __device__ void apply_force_gpu(particle_t &particle, particle_t &neighbor) {
   double dx = neighbor.x - particle.x;
@@ -86,10 +92,19 @@ __device__ void apply_force_gpu(particle_t &particle, particle_t &neighbor) {
 }
 
 // Called in compute_force_grid
-__device__ void compute_force_between_blocks(particle_t* device_particles, Bin& bin_A, Bin& bin_B){
+__device__ void compute_force_within_block(Bin& bin){
+    for (int i = 0; i < bin.currentSize; i++){
+      for (int j = 0; j < bin.currentSize; j++){
+        apply_force_gpu(bin.particles[i], bin.particles[j]);
+      }
+    }
+}
+
+// Called in compute_force_grid
+__device__ void compute_force_between_blocks(Bin& bin_A, Bin& bin_B){
   for (int i = 0; i < bin_A.currentSize; i++){
     for (int j = 0; j < bin_B.currentSize; j++){
-      apply_force_gpu(device_particles[bin_A.ids[i]], device_particles[bin_B.ids[j]]);
+      apply_force_gpu(bin_A.particles[i], bin_B.particles[j]);
     }
   }
 }
@@ -117,6 +132,6 @@ __device__ void bin_change(Bin* redundantBins, particle_t p, int id, double BIN_
   int which_block_x = min((int)(p.x / BIN_SIZE), NUM_BINS_PER_DIM - 1);
   int which_block_y = min((int)(p.y / BIN_SIZE), NUM_BINS_PER_DIM - 1);
   //atomic operation for addParticle
-  redundantBins[FIND_POS_DEVICE(which_block_y, which_block_x, NUM_BINS_PER_DIM)].addParticle_device(id);
+  addParticle(redundantBins[FIND_POS_DEVICE(which_block_y, which_block_x, NUM_BINS_PER_DIM)], p, id);
 }
 

@@ -41,7 +41,7 @@ __host__ Bin* generateGrid(particle_t* particles, int n){
         int which_block_x = min((int)(particles[i].x / BIN_SIZE), NUM_BINS_PER_DIM - 1);
         int which_block_y = min((int)(particles[i].y / BIN_SIZE), NUM_BINS_PER_DIM - 1);
         int index = FIND_POS_HOST(which_block_y, which_block_x, NUM_BINS_PER_DIM);
-        grid[index].addParticle_host(i);
+        grid[index].addParticle(particles[i], i);
     }
     return grid;
 }
@@ -49,17 +49,15 @@ __host__ Bin* generateGrid(particle_t* particles, int n){
 // Step 3
 // Push the grid to the gpu
 __host__ Bin* push_data_to_device(Bin* grid){
+
+    // First, allocate enough bins on GPUs
     Bin* bins;
     GPUERRCHK(cudaMalloc((void **) &bins, NUM_BINS_PER_DIM * NUM_BINS_PER_DIM * sizeof(Bin)));
-    GPUERRCHK(cudaMemcpy(bins, grid, NUM_BINS_PER_DIM * NUM_BINS_PER_DIM * sizeof(Bin), cudaMemcpyHostToDevice));
-    return bins;
-}
 
-__host__ particle_t* push_particles_to_device(particle_t* particles, int n){
-    particle_t* device_particles;
-    GPUERRCHK(cudaMalloc((void **) &device_particles, n * sizeof(particle_t)));
-    GPUERRCHK(cudaMemcpy(device_particles, particles, n * sizeof(particle_t), cudaMemcpyHostToDevice));
-    return device_particles;
+    // Second, memcpy from grid to bins
+    GPUERRCHK(cudaMemcpy(bins, grid, NUM_BINS_PER_DIM * NUM_BINS_PER_DIM * sizeof(Bin), cudaMemcpyHostToDevice));
+
+    return bins;
 }
 
 // Step 4
@@ -81,81 +79,83 @@ __global__ void clear_bins(Bin* redundantBins, int NUM_BINS_PER_DIM){
 }
 
 
-__device__ void compute_force_grid(particle_t* device_particles, Bin* bins, int NUM_BINS_PER_DIM, int tid){
+__device__ void compute_force_grid(Bin* bins, int NUM_BINS_PER_DIM, int tid){
 
     int i = tid / NUM_BINS_PER_DIM;
     int j = tid % NUM_BINS_PER_DIM;
 
     int currentIndex = FIND_POS_DEVICE(i, j, NUM_BINS_PER_DIM);
-    Bin& currentBin = bins[currentIndex];
 
     //set acceleration to zero
-    for (int k = 0; k < currentBin.currentSize; k++){
-        device_particles[currentBin.ids[k]].ax = device_particles[currentBin.ids[k]].ay = 0;
+    for (int k = 0; k < bins[currentIndex].currentSize; k++){
+        bins[currentIndex].particles[k].ax = bins[currentIndex].particles[k].ay = 0;
     }
+
     //check right
     if (j != NUM_BINS_PER_DIM - 1){
-        compute_force_between_blocks(device_particles, currentBin, bins[FIND_POS_DEVICE(i, j+1, NUM_BINS_PER_DIM)]);
+        compute_force_between_blocks(bins[currentIndex], bins[FIND_POS_DEVICE(i, j+1, NUM_BINS_PER_DIM)]);
     }
     //check diagonal right bot
     if (j != NUM_BINS_PER_DIM - 1 && i != NUM_BINS_PER_DIM - 1){
-        compute_force_between_blocks(device_particles, currentBin, bins[FIND_POS_DEVICE(i+1, j+1, NUM_BINS_PER_DIM)]);
+        compute_force_between_blocks(bins[currentIndex], bins[FIND_POS_DEVICE(i+1, j+1, NUM_BINS_PER_DIM)]);
     }
     //check diagonal right top
     if (j != NUM_BINS_PER_DIM - 1 && i != 0){
-        compute_force_between_blocks(device_particles, currentBin, bins[FIND_POS_DEVICE(i-1, j+1, NUM_BINS_PER_DIM)]);
+        compute_force_between_blocks(bins[currentIndex], bins[FIND_POS_DEVICE(i-1, j+1, NUM_BINS_PER_DIM)]);
     }
     //check left
     if (j != 0){
-        compute_force_between_blocks(device_particles, currentBin, bins[FIND_POS_DEVICE(i, j-1, NUM_BINS_PER_DIM)]);
+        compute_force_between_blocks(bins[currentIndex], bins[FIND_POS_DEVICE(i, j-1, NUM_BINS_PER_DIM)]);
     }
     //check diagonal left bot
     if (j != 0 && i != NUM_BINS_PER_DIM - 1){
-        compute_force_between_blocks(device_particles, currentBin, bins[FIND_POS_DEVICE(i+1, j-1, NUM_BINS_PER_DIM)]);
+        compute_force_between_blocks(bins[currentIndex], bins[FIND_POS_DEVICE(i+1, j-1, NUM_BINS_PER_DIM)]);
     }
     //check diagonal left top
     if (j != 0 && i != 0){
-        compute_force_between_blocks(device_particles,currentBin, bins[FIND_POS_DEVICE(i-1, j-1, NUM_BINS_PER_DIM)]);
+        compute_force_between_blocks(bins[currentIndex], bins[FIND_POS_DEVICE(i-1, j-1, NUM_BINS_PER_DIM)]);
     }
     //check top
     if (i != 0){
-        compute_force_between_blocks(device_particles, currentBin, bins[FIND_POS_DEVICE(i-1, j, NUM_BINS_PER_DIM)]);
+        compute_force_between_blocks(bins[currentIndex], bins[FIND_POS_DEVICE(i-1, j, NUM_BINS_PER_DIM)]);
     }
     //check bot
     if (i != NUM_BINS_PER_DIM - 1){
-        compute_force_between_blocks(device_particles, currentBin, bins[FIND_POS_DEVICE(i+1, j, NUM_BINS_PER_DIM)]);
+        compute_force_between_blocks(bins[currentIndex], bins[FIND_POS_DEVICE(i+1, j, NUM_BINS_PER_DIM)]);
     }
     //compute within itself
-    compute_force_between_blocks(device_particles, currentBin, currentBin);
+    compute_force_within_block(bins[currentIndex]);
 }
 
-__device__ void move_particles(particle_t* device_particles, Bin* bins, Bin* redundantBins, double BIN_SIZE, int NUM_BINS_PER_DIM, double GRID_SIZE, int tid){
+__device__ void move_particles(Bin* bins, Bin* redundantBins, double BIN_SIZE, int NUM_BINS_PER_DIM, double GRID_SIZE, int tid){
     Bin& bin = bins[tid];
     for (int k = 0; k < bin.currentSize; k++){
-        move_gpu(&device_particles[bin.ids[k]], GRID_SIZE);
-        bin_change(redundantBins, device_particles[bin.ids[k]], bin.ids[k], BIN_SIZE, NUM_BINS_PER_DIM);
+        move_gpu(&bin.particles[k], GRID_SIZE);
+        bin_change(redundantBins, bin.particles[k], bin.ids[k], BIN_SIZE, NUM_BINS_PER_DIM);
     }
 }
 
-__global__ void compute_move_particles(particle_t* device_particles, Bin* bins, Bin* redundantBins, double BIN_SIZE, int NUM_BINS_PER_DIM, double GRID_SIZE){
+__global__ void compute_move_particles(Bin* bins, Bin* redundantBins, double BIN_SIZE, int NUM_BINS_PER_DIM, double GRID_SIZE){
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     if (tid >= NUM_BINS_PER_DIM * NUM_BINS_PER_DIM){ 
         return;
     }
-    compute_force_grid(device_particles, bins, NUM_BINS_PER_DIM, tid);
-    move_particles(device_particles, bins, redundantBins, BIN_SIZE, NUM_BINS_PER_DIM, GRID_SIZE, tid);
+
+  __syncthreads();// wait for each thread to copy its elemenet
+    compute_force_grid(bins, NUM_BINS_PER_DIM, tid);
+    move_particles(bins, redundantBins, BIN_SIZE, NUM_BINS_PER_DIM, GRID_SIZE, tid);
 }
 
 
 
 // Simulation begins
-__host__ void simulate_particles(FILE* fsave, particle_t* particles, particle_t* device_particles, Bin* grid, Bin* bins, Bin* redundantBins, int n){
+__host__ void simulate_particles(FILE* fsave, particle_t* particles, Bin* grid, Bin* bins, Bin* redundantBins, int n){
 
     int num_blocks = (NUM_BINS_PER_DIM * NUM_BINS_PER_DIM + NUM_THREADS - 1) / NUM_THREADS;
 
     for(int step = 0; step < NSTEPS; step++ ) {
 
-        compute_move_particles <<< num_blocks, NUM_THREADS >>> (device_particles, bins, redundantBins, BIN_SIZE, NUM_BINS_PER_DIM, GRID_SIZE);
+        compute_move_particles <<< num_blocks, NUM_THREADS >>> (bins, redundantBins, BIN_SIZE, NUM_BINS_PER_DIM, GRID_SIZE);
 
         swap(bins, redundantBins);
 
@@ -164,8 +164,18 @@ __host__ void simulate_particles(FILE* fsave, particle_t* particles, particle_t*
 
         if( fsave && (step%SAVEFREQ) == 0 ) {
             // Copy the particles back to the CPU
-            cudaMemcpy(particles, device_particles, n * sizeof(particle_t), cudaMemcpyDeviceToHost);
-            save( fsave, n, particles);
+            cudaMemcpy(grid, bins, NUM_BINS_PER_DIM * NUM_BINS_PER_DIM * sizeof(Bin), cudaMemcpyDeviceToHost);
+            int count = 0;
+            for (int p = 0; p < NUM_BINS_PER_DIM; p++){
+                for (int q = 0; q < NUM_BINS_PER_DIM; q++){
+                    Bin& thisBin = grid[FIND_POS_HOST(p,q, NUM_BINS_PER_DIM)];
+                    for (int k = 0; k < thisBin.currentSize; k++){
+                        count++;
+                        particles[thisBin.ids[k]] = thisBin.particles[k];
+                    }
+                }
+            }
+            save( fsave, count, particles);
         }
     }
 }
@@ -208,8 +218,6 @@ int main( int argc, char **argv )
     
     // Step 3 push the grid to the gpu
     Bin* device_bins = push_data_to_device(grid);
-
-    particle_t* device_particles = push_particles_to_device(particles, n);
     
     // Step 4 generate redundant bins for devie_bins
     // We use it store data and later swap with device bins after each round
@@ -224,7 +232,7 @@ int main( int argc, char **argv )
     cudaThreadSynchronize();
     double simulation_time = read_timer( );
     // Simulate Particles
-    simulate_particles(fsave, particles, device_particles, grid, device_bins, device_redundant_bins, n);
+    simulate_particles(fsave, particles, grid, device_bins, device_redundant_bins, n);
     simulation_time = read_timer( ) - simulation_time;
     cudaThreadSynchronize();
     
