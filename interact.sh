@@ -6,4 +6,4 @@
 #SBATCH --gres=gpu:k80:1
 #SBATCH -t 00:10:00
 #SBATCH -N 1         
-interact -A cc3uv3p -p GPU-shared --gres=gpu:k80:1 -t 01:00:00 -N 1
+interact -A cc3uv3p -p GPU-shared --gres=gpu:k80:1 -t 00:30:00 -N 1

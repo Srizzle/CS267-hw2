@@ -85,53 +85,55 @@ __device__ void compute_force_grid(Bin* bins, int NUM_BINS_PER_DIM, int tid){
     int j = tid % NUM_BINS_PER_DIM;
 
     int currentIndex = FIND_POS_DEVICE(i, j, NUM_BINS_PER_DIM);
+    Bin& currentBin = bins[currentIndex];
 
     //set acceleration to zero
-    for (int k = 0; k < bins[currentIndex].currentSize; k++){
-        bins[currentIndex].particles[k].ax = bins[currentIndex].particles[k].ay = 0;
+    for (int k = 0; k < currentBin.currentSize; k++){
+        currentBin.particles[k].ax = currentBin.particles[k].ay = 0;
     }
 
     //check right
     if (j != NUM_BINS_PER_DIM - 1){
-        compute_force_between_blocks(bins[currentIndex], bins[FIND_POS_DEVICE(i, j+1, NUM_BINS_PER_DIM)]);
+        compute_force_between_blocks(currentBin, bins[i * NUM_BINS_PER_DIM + j + 1]);
     }
     //check diagonal right bot
     if (j != NUM_BINS_PER_DIM - 1 && i != NUM_BINS_PER_DIM - 1){
-        compute_force_between_blocks(bins[currentIndex], bins[FIND_POS_DEVICE(i+1, j+1, NUM_BINS_PER_DIM)]);
+        compute_force_between_blocks(currentBin, bins[(i + 1) * NUM_BINS_PER_DIM + j + 1]);
     }
     //check diagonal right top
     if (j != NUM_BINS_PER_DIM - 1 && i != 0){
-        compute_force_between_blocks(bins[currentIndex], bins[FIND_POS_DEVICE(i-1, j+1, NUM_BINS_PER_DIM)]);
+        compute_force_between_blocks(currentBin, bins[(i-1)* NUM_BINS_PER_DIM + j + 1]);
     }
     //check left
     if (j != 0){
-        compute_force_between_blocks(bins[currentIndex], bins[FIND_POS_DEVICE(i, j-1, NUM_BINS_PER_DIM)]);
+        compute_force_between_blocks(currentBin, bins[i * NUM_BINS_PER_DIM + j -1]);
     }
     //check diagonal left bot
     if (j != 0 && i != NUM_BINS_PER_DIM - 1){
-        compute_force_between_blocks(bins[currentIndex], bins[FIND_POS_DEVICE(i+1, j-1, NUM_BINS_PER_DIM)]);
+        compute_force_between_blocks(currentBin, bins[(i+1)*NUM_BINS_PER_DIM+j-1]);
     }
     //check diagonal left top
     if (j != 0 && i != 0){
-        compute_force_between_blocks(bins[currentIndex], bins[FIND_POS_DEVICE(i-1, j-1, NUM_BINS_PER_DIM)]);
+        compute_force_between_blocks(currentBin, bins[(i-1)*NUM_BINS_PER_DIM+j-1]);
     }
     //check top
     if (i != 0){
-        compute_force_between_blocks(bins[currentIndex], bins[FIND_POS_DEVICE(i-1, j, NUM_BINS_PER_DIM)]);
+        compute_force_between_blocks(currentBin, bins[(i-1)*NUM_BINS_PER_DIM+j]);
     }
     //check bot
     if (i != NUM_BINS_PER_DIM - 1){
-        compute_force_between_blocks(bins[currentIndex], bins[FIND_POS_DEVICE(i+1, j, NUM_BINS_PER_DIM)]);
+        compute_force_between_blocks(currentBin, bins[(i+1)*NUM_BINS_PER_DIM+j]);
     }
     //compute within itself
-    compute_force_within_block(bins[currentIndex]);
+    compute_force_within_block(currentBin);
 }
 
 __device__ void move_particles(Bin* bins, Bin* redundantBins, double BIN_SIZE, int NUM_BINS_PER_DIM, double GRID_SIZE, int tid){
     Bin& bin = bins[tid];
     for (int k = 0; k < bin.currentSize; k++){
-        move_gpu(&bin.particles[k], GRID_SIZE);
-        bin_change(redundantBins, bin.particles[k], bin.ids[k], BIN_SIZE, NUM_BINS_PER_DIM);
+        particle_t p = bin.particles[k];
+        move_gpu(&p, GRID_SIZE);
+        bin_change(redundantBins, p, bin.ids[k], BIN_SIZE, NUM_BINS_PER_DIM);
     }
 }
 
@@ -140,8 +142,6 @@ __global__ void compute_move_particles(Bin* bins, Bin* redundantBins, double BIN
     if (tid >= NUM_BINS_PER_DIM * NUM_BINS_PER_DIM){ 
         return;
     }
-
-  __syncthreads();// wait for each thread to copy its elemenet
     compute_force_grid(bins, NUM_BINS_PER_DIM, tid);
     move_particles(bins, redundantBins, BIN_SIZE, NUM_BINS_PER_DIM, GRID_SIZE, tid);
 }

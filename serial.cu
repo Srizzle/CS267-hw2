@@ -55,6 +55,8 @@ void move_to_another_block(int i, double old_x, double old_y,
       if (which_block_x_old != which_block_x || which_block_y_old != which_block_y){
         grid[which_block_y_old][which_block_x_old].erase(i);
         grid[which_block_y][which_block_x].insert(i);
+        // cout << "Membership change" << endl;
+        // printf("From %d %d to %d %d \n", which_block_y_old, which_block_x_old, which_block_y, which_block_x);
       }
 }
 
@@ -152,7 +154,7 @@ void simulate_particles(particle_t* particles, int n, FILE* fsave, int argc, cha
     //gerenate grid
     generateGrid(particles, n);
 
-    for(int step = 0; step < 100; step++ ) {
+    for(int step = 0; step < 50; step++ ) {
 
         //double computation_begin = read_timer();
         compute_force_grid(particles);
@@ -161,7 +163,7 @@ void simulate_particles(particle_t* particles, int n, FILE* fsave, int argc, cha
         move_particles(particles, n);
 
         //save if necessary
-        if( fsave && (step%SAVEFREQ) == 0 ) {
+        if( fsave && (step%1) == 0 ) {
           save( fsave, n, particles);
         }
     }

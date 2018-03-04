@@ -17,8 +17,9 @@ extern double size;
 
 // Based on StackOverflow
 #define GPUERRCHK(ans) { gpuAssert((ans), __FILE__, __LINE__); }
-#define MAX_BIN_SIZE 15
+#define MAX_BIN_SIZE 10
 #define DEBUG 0
+#define STRIDE 5
 
 __host__ int FIND_POS_HOST(int i, int j, int stride){
   return i * stride + j;
