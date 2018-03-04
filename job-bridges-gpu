@@ -1,0 +1,11 @@
+#!/bin/bash
+#SBATCH -A cc3uv3p
+#SBATCH -J particle-gpu
+#SBATCH -o particle-gpu.stdout
+#SBATCH -n 1         
+#SBATCH -p GPU-shared
+#SBATCH --gres=gpu:k80:1
+#SBATCH -t 00:10:00     
+./gpu -n 20000 -o gpu.txt
+
+./autocorrect -s gpu.txt

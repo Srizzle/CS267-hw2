@@ -1,0 +1,9 @@
+#!/bin/bash
+#SBATCH -A cc3uv3p
+#SBATCH -J particle-serial-no-test
+#SBATCH -o particle-serial-no-test.stdout
+#SBATCH -N 1         
+#SBATCH -p GPU-shared
+#SBATCH --gres=gpu:k80:1
+#SBATCH -t 00:10:00     
+./serial -n 30000
