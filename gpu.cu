@@ -157,13 +157,19 @@ __global__ void compute_move_particles(Bin* bins, Bin* redundantBins, double BIN
     /*
     __shared__ Bin local_memory[18*18]; 
 
-    int i = threadIdx.y;
-    int j = threadIdx.x;
+    int local_i = threadIdx.y;
+    int local_j = threadIdx.x;
 
-    if( 1 <= i && i <= 15 && && 1 <= j && j <= 15 ){
-        local_memory[i*16 + j] = bins[i*NUM_BINS_PER_DIM + j];
+
+
+    if( 1 <= i && i <= 14 && && 1 <= j && j <= 14 ){
+        local_memory[i*16 + j] = bins[tid_y*NUM_BINS_PER_DIM + tid_x];
+    }
+    if( (i == 0 || i == 15) && (j == 0  || j == 15)  ){
+        local_memory[i*16 + j]
     }
     */
+
     //array[tid*y + ticx] = copy 
 
     //__syncthreads(); 
