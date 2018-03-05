@@ -1,6 +1,6 @@
 #include "gpu.h"
 #include "common.h"
-
+#include <math.h> 
 using namespace std;
 
 // Step 1
@@ -84,14 +84,14 @@ __global__ void clear_bins(Bin* redundantBins, int NUM_BINS_PER_DIM){
         return;
     }
 
-    redundantBins[tid_x*NUM_BINS_PER_DIM + tid_y].currentSize = 0;
+    redundantBins[tid_y*NUM_BINS_PER_DIM + tid_x].currentSize = 0;
 }
 
 
 __device__ void compute_force_grid(Bin* bins, int NUM_BINS_PER_DIM, int tid_x, int tid_y){
 
-    int i = tid_x;
-    int j = tid_y;
+    int i = tid_y;
+    int j = tid_x;
 
     int currentIndex = FIND_POS_DEVICE(i, j, NUM_BINS_PER_DIM);
     Bin& currentBin = bins[currentIndex];
@@ -138,7 +138,7 @@ __device__ void compute_force_grid(Bin* bins, int NUM_BINS_PER_DIM, int tid_x, i
 }
 
 __device__ void move_particles(Bin* bins, Bin* redundantBins, double BIN_SIZE, int NUM_BINS_PER_DIM, double GRID_SIZE, int tid_x,int tid_y){
-    Bin& bin = bins[tid_x*NUM_BINS_PER_DIM + tid_y];
+    Bin& bin = bins[tid_y*NUM_BINS_PER_DIM + tid_x];
     for (int k = 0; k < bin.currentSize; k++){
         particle_t p = bin.particles[k];
         move_gpu(&p, GRID_SIZE);
@@ -172,9 +172,7 @@ __host__ void simulate_particles(FILE* fsave, particle_t* particles, Bin* grid, 
     // New square blocking
 
     dim3 threadsPerBlock(16, 16); // 256 threads 
-    dim3 numBlocks(NUM_BINS_PER_DIM/threadsPerBlock.x, NUM_BINS_PER_DIM/threadsPerBlock.y);
-
-
+    dim3 numBlocks(ceil(NUM_BINS_PER_DIM * 1.0/threadsPerBlock.x), ceil(NUM_BINS_PER_DIM*1.0/threadsPerBlock.y) );
 
     for(int step = 0; step < NSTEPS; step++ ) {
 
