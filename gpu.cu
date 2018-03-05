@@ -90,15 +90,7 @@ __global__ void clear_bins(Bin* redundantBins, int NUM_BINS_PER_DIM){
 
 __device__ void compute_force_grid(Bin* bins, int NUM_BINS_PER_DIM, int tid_x, int tid_y){
 
-    //__shared__ array[];
 
-    int i = tid_y;
-    int j = tid_x;
-
-    
-    //array[tid*y + ticx] = copy 
-
-    //__syncthreads(); 
 
     int currentIndex = FIND_POS_DEVICE(i, j, NUM_BINS_PER_DIM);
     Bin& currentBin = bins[currentIndex];
@@ -162,6 +154,19 @@ __global__ void compute_move_particles(Bin* bins, Bin* redundantBins, double BIN
     if (tid_y >=NUM_BINS_PER_DIM ){
         return;
     }
+    /*
+    __shared__ Bin local_memory[18*18]; 
+
+    int i = threadIdx.y;
+    int j = threadIdx.x;
+
+    if( 1 <= i && i <= 15 && && 1 <= j && j <= 15 ){
+        local_memory[i*16 + j] = bins[i*NUM_BINS_PER_DIM + j];
+    }
+    */
+    //array[tid*y + ticx] = copy 
+
+    //__syncthreads(); 
 
     compute_force_grid(bins, NUM_BINS_PER_DIM, tid_x, tid_y);
     move_particles(bins, redundantBins, BIN_SIZE, NUM_BINS_PER_DIM, GRID_SIZE, tid_x, tid_y);
