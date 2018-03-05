@@ -12,4 +12,9 @@
 ./gpu -n 20000
 ./gpu -n 40000 
 ./gpu -n 80000 
+./serial -n 5000 
+./serial -n 10000 
+./serial -n 20000 
+./serial -n 40000 
+./serial -n 80000  
 ./autograder -s benchmark.txt -v gpu
