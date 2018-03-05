@@ -260,7 +260,7 @@ int main( int argc, char **argv )
     cudaThreadSynchronize();
     
     printf( "CPU-GPU copy time = %g seconds\n", copy_time);
-    printf( "n = %d, simulation time = %g seconds\n", n, simulation_time );
+    printf( "%d %g\n", n, simulation_time );
     
     free( particles );
     free(grid);
