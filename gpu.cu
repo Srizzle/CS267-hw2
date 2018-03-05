@@ -26,6 +26,10 @@ __host__ void variables_initialization(int n){
     
 }
 
+
+
+
+
 // Step 2
 // Generate the grid
 __host__ Bin* generateGrid(particle_t* particles, int n){
@@ -151,7 +155,16 @@ __global__ void compute_move_particles(Bin* bins, Bin* redundantBins, double BIN
 // Simulation begins
 __host__ void simulate_particles(FILE* fsave, particle_t* particles, Bin* grid, Bin* bins, Bin* redundantBins, int n){
 
-    int num_blocks = (NUM_BINS_PER_DIM * NUM_BINS_PER_DIM + NUM_THREADS - 1) / NUM_THREADS;
+    //int num_blocks = (NUM_BINS_PER_DIM * NUM_BINS_PER_DIM + NUM_THREADS - 1) / NUM_THREADS;
+
+
+
+    // New square blocking
+
+    dim3 threadsPerBlock(16, 16); // 256 threads 
+    dim3 numBlocks(NUM_BINS_PER_DIM/threadsPerBlock.x, NUM_BINS_PER_DIM/threadsPerBlock.y);
+
+
 
     for(int step = 0; step < NSTEPS; step++ ) {
 
