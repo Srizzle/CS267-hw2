@@ -75,18 +75,23 @@ __host__ Bin* generateRedundantBins(){
 // Step 0
 // Clear the redundant bins
 __global__ void clear_bins(Bin* redundantBins, int NUM_BINS_PER_DIM){
-    int tid = threadIdx.x + blockIdx.x * blockDim.x;
-    if (tid >= NUM_BINS_PER_DIM * NUM_BINS_PER_DIM){ 
+    int tid_x = threadIdx.x + blockIdx.x * blockDim.x;
+    int tid_y = threadIdx.y + blockIdx.y * blockDim.y; 
+    if (tid_x >= NUM_BINS_PER_DIM){ 
         return;
     }
-    redundantBins[tid].currentSize = 0;
+    if (tid_y >= NUM_BINS_PER_DIM){ 
+        return;
+    }
+
+    redundantBins[tid_x*NUM_BINS_PER_DIM + tid_y].currentSize = 0;
 }
 
 
-__device__ void compute_force_grid(Bin* bins, int NUM_BINS_PER_DIM, int tid){
+__device__ void compute_force_grid(Bin* bins, int NUM_BINS_PER_DIM, int tid_x, int tid_y){
 
-    int i = tid / NUM_BINS_PER_DIM;
-    int j = tid % NUM_BINS_PER_DIM;
+    int i = tid_x;
+    int j = tid_y;
 
     int currentIndex = FIND_POS_DEVICE(i, j, NUM_BINS_PER_DIM);
     Bin& currentBin = bins[currentIndex];
@@ -132,8 +137,8 @@ __device__ void compute_force_grid(Bin* bins, int NUM_BINS_PER_DIM, int tid){
     compute_force_within_block(currentBin);
 }
 
-__device__ void move_particles(Bin* bins, Bin* redundantBins, double BIN_SIZE, int NUM_BINS_PER_DIM, double GRID_SIZE, int tid){
-    Bin& bin = bins[tid];
+__device__ void move_particles(Bin* bins, Bin* redundantBins, double BIN_SIZE, int NUM_BINS_PER_DIM, double GRID_SIZE, int tid_x,int tid_y){
+    Bin& bin = bins[tid_x*NUM_BINS_PER_DIM + tid_y];
     for (int k = 0; k < bin.currentSize; k++){
         particle_t p = bin.particles[k];
         move_gpu(&p, GRID_SIZE);
@@ -142,12 +147,17 @@ __device__ void move_particles(Bin* bins, Bin* redundantBins, double BIN_SIZE, i
 }
 
 __global__ void compute_move_particles(Bin* bins, Bin* redundantBins, double BIN_SIZE, int NUM_BINS_PER_DIM, double GRID_SIZE){
-    int tid = threadIdx.x + blockIdx.x * blockDim.x;
-    if (tid >= NUM_BINS_PER_DIM * NUM_BINS_PER_DIM){ 
+    int tid_x = threadIdx.x + blockIdx.x * blockDim.x;
+    int tid_y = threadIdx.y + blockIdx.y * blockDim.y;
+    if (tid_x >= NUM_BINS_PER_DIM){ 
         return;
     }
-    compute_force_grid(bins, NUM_BINS_PER_DIM, tid);
-    move_particles(bins, redundantBins, BIN_SIZE, NUM_BINS_PER_DIM, GRID_SIZE, tid);
+    if (tid_y >=NUM_BINS_PER_DIM ){
+        return;
+    }
+
+    compute_force_grid(bins, NUM_BINS_PER_DIM, tid_x, tid_y);
+    move_particles(bins, redundantBins, BIN_SIZE, NUM_BINS_PER_DIM, GRID_SIZE, tid_x, tid_y);
 }
 
 
@@ -168,11 +178,11 @@ __host__ void simulate_particles(FILE* fsave, particle_t* particles, Bin* grid, 
 
     for(int step = 0; step < NSTEPS; step++ ) {
 
-        compute_move_particles <<< num_blocks, NUM_THREADS >>> (bins, redundantBins, BIN_SIZE, NUM_BINS_PER_DIM, GRID_SIZE);
+        compute_move_particles <<< numBlocks, threadsPerBlock >>> (bins, redundantBins, BIN_SIZE, NUM_BINS_PER_DIM, GRID_SIZE);
 
         swap(bins, redundantBins);
 
-        clear_bins <<< num_blocks, NUM_THREADS >>> (redundantBins, NUM_BINS_PER_DIM);
+        clear_bins <<< numBlocks, threadsPerBlock >>> (redundantBins, NUM_BINS_PER_DIM);
 
 
         if( fsave && (step%SAVEFREQ) == 0 ) {
