@@ -90,8 +90,15 @@ __global__ void clear_bins(Bin* redundantBins, int NUM_BINS_PER_DIM){
 
 __device__ void compute_force_grid(Bin* bins, int NUM_BINS_PER_DIM, int tid_x, int tid_y){
 
+    //__shared__ array[];
+
     int i = tid_y;
     int j = tid_x;
+
+    
+    //array[tid*y + ticx] = copy 
+
+    //__syncthreads(); 
 
     int currentIndex = FIND_POS_DEVICE(i, j, NUM_BINS_PER_DIM);
     Bin& currentBin = bins[currentIndex];
