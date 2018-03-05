@@ -63,7 +63,7 @@ __host__ Bin* push_data_to_device(Bin* grid){
 // Step 4
 // Generate a dummy buffer for the bins
 __host__ Bin* generateRedundantBins(){
-    Bin* redundantBins;
+    Bin* redundantBins; // here is where we can change it to a 2d array? which then allows CUDA 2-d? 
     GPUERRCHK(cudaMalloc((void **) &redundantBins, NUM_BINS_PER_DIM * NUM_BINS_PER_DIM * sizeof(Bin)));
     return redundantBins;
 }
