@@ -162,17 +162,17 @@ __global__ void compute_move_particles(Bin* bins, Bin* redundantBins, double BIN
         return;
     }
     
-    __shared__ Bin local_memory[(thread_length+2)*(thread_length+2)]; 
+    __shared__ Bin local_memory[10*10 ]; 
 
     int i = threadIdx.y;
     int j = threadIdx.x;
 
 // this numbering might be wrong because i -> y, j -> x but this is wrong passing for tid_x, tid_y
 
-    if( 1 <= i && i <= (thread_length -2)  && 1 <= j && j <= (thread_length-2)  ){
+    if( 1 <= i && i <= 6  && 1 <= j && j <= 6 ){
         local_memory[ LOCAL_BLOCK_INDEX(i, j) ] = *BINS_INDEX_RETURN(tid_x, tid_y, bins, NUM_BINS_PER_DIM);
     }
-    else if( (i == 0 || i == (thread_length -1) ) && (j == 0  || j == (thread_length-1) )  ){
+    else if( (i == 0 || i == 7 ) && (j == 0  || j == 7 )  ){
         local_memory[ LOCAL_BLOCK_INDEX(i,j) ] = *BINS_INDEX_RETURN(tid_x, tid_y, bins, NUM_BINS_PER_DIM);
 
         int i_offset;
@@ -195,7 +195,7 @@ __global__ void compute_move_particles(Bin* bins, Bin* redundantBins, double BIN
         local_memory[ LOCAL_BLOCK_INDEX(i,j+j_offset) ] = *BINS_INDEX_RETURN(tid_x + j_offset, tid_y, bins, NUM_BINS_PER_DIM);
         
     }
-    else if(i== 0 || i == (thread_length -1) ){
+    else if(i== 0 || i == 7 ){
         local_memory[ LOCAL_BLOCK_INDEX(i,j) ] = *BINS_INDEX_RETURN(tid_x, tid_y, bins, NUM_BINS_PER_DIM);
         int i_offset;
         if(i ==0){
@@ -207,7 +207,7 @@ __global__ void compute_move_particles(Bin* bins, Bin* redundantBins, double BIN
         local_memory[ LOCAL_BLOCK_INDEX(i + i_offset, j) ] =* BINS_INDEX_RETURN(tid_x, tid_y + i_offset, bins, NUM_BINS_PER_DIM);
 
     } 
-    else if (j == 0 || (j == thread_length-1) ){
+    else if (j == 0 || j == 7  ){
         local_memory[ LOCAL_BLOCK_INDEX(i,j) ] = *BINS_INDEX_RETURN(tid_x, tid_y, bins, NUM_BINS_PER_DIM);
         int j_offset;
         if(j == 0){
@@ -243,7 +243,7 @@ __host__ void simulate_particles(FILE* fsave, particle_t* particles, Bin* grid, 
 
     // New square blocking
 
-    dim3 threadsPerBlock(thread_length, thread_length); // 64 threads 
+    dim3 threadsPerBlock(8, 8 ); // 64 threads 
     dim3 numBlocks(ceil(NUM_BINS_PER_DIM * 1.0/threadsPerBlock.x), ceil(NUM_BINS_PER_DIM*1.0/threadsPerBlock.y) );
 
     for(int step = 0; step < NSTEPS; step++ ) {
