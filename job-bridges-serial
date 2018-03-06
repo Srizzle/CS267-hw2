@@ -1,0 +1,10 @@
+#!/bin/bash
+#SBATCH -A cc3uv3p
+#SBATCH -J particle-serial
+#SBATCH -o particle-serial.stdout
+#SBATCH -N 1         
+#SBATCH -p GPU-shared
+#SBATCH --gres=gpu:k80:1
+#SBATCH -t 00:10:00     
+./serial_gcc -n 20000 -o serial.txt
+./autocorrect -s serial.txt
