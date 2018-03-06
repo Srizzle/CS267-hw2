@@ -1,0 +1,22 @@
+CPU-GPU copy time = 0.001267 seconds
+n = 1000, simulation time = 0.05768 seconds
+CPU-GPU copy time = 0.000795 seconds
+n = 2000, simulation time = 0.061477 seconds
+CPU-GPU copy time = 0.000934 seconds
+n = 4000, simulation time = 0.066569 seconds
+CPU-GPU copy time = 0.001437 seconds
+n = 8000, simulation time = 0.090887 seconds
+CPU-GPU copy time = 0.001636 seconds
+n = 16000, simulation time = 0.159223 seconds
+CPU-GPU copy time = 0.002309 seconds
+n = 32000, simulation time = 0.367454 seconds
+CPU-GPU copy time = 0.004382 seconds
+n = 64000, simulation time = 0.655841 seconds
+
+n = 1000, simulation time = 0.290964 seconds, absmin = 0.754773, absavg = 0.957686
+n = 2000, simulation time = 0.554658 seconds, absmin = 0.756225, absavg = 0.957331
+n = 4000, simulation time = 1.09118 seconds, absmin = 0.767467, absavg = 0.956866
+n = 8000, simulation time = 2.45083 seconds, absmin = 0.762116, absavg = 0.956841
+n = 16000, simulation time = 4.88098 seconds, absmin = 0.754409, absavg = 0.956936
+n = 32000, simulation time = 9.45118 seconds, absmin = 0.757633, absavg = 0.956990
+n = 64000, simulation time = 18.9499 seconds, absmin = 0.758107, absavg = 0.957052
