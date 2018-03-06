@@ -3,6 +3,8 @@
 #include <math.h> 
 using namespace std;
 
+
+
 // Step 1
 // Generate constant variables 
 __host__ void variables_initialization(int n){
@@ -88,12 +90,14 @@ __global__ void clear_bins(Bin* redundantBins, int NUM_BINS_PER_DIM){
 }
 
 
-__device__ void compute_force_grid(Bin* bins, int NUM_BINS_PER_DIM, int tid_x, int tid_y){
+__device__ void compute_force_grid(Bin* bins, int NUM_BINS_PER_DIM, int i, int j, Bin* local_memory){
 
 
 
-    int currentIndex = FIND_POS_DEVICE(i, j, NUM_BINS_PER_DIM);
-    Bin& currentBin = bins[currentIndex];
+    //int currentIndex = FIND_POS_DEVICE(i, j, NUM_BINS_PER_DIM);
+    //Bin& currentBin = bins[currentIndex];
+
+    Bin& currentBin = local_memory[ LOCAL_BLOCK_INDEX(i , j) ];
 
     //set acceleration to zero
     for (int k = 0; k < currentBin.currentSize; k++){
@@ -102,48 +106,51 @@ __device__ void compute_force_grid(Bin* bins, int NUM_BINS_PER_DIM, int tid_x, i
 
     //check right
     if (j != NUM_BINS_PER_DIM - 1){
-        compute_force_between_blocks(currentBin, bins[i * NUM_BINS_PER_DIM + j + 1]);
+        compute_force_between_blocks(currentBin, local_memory[ LOCAL_BLOCK_INDEX(i , j+1) ]);
     }
     //check diagonal right bot
     if (j != NUM_BINS_PER_DIM - 1 && i != NUM_BINS_PER_DIM - 1){
-        compute_force_between_blocks(currentBin, bins[(i + 1) * NUM_BINS_PER_DIM + j + 1]);
+        compute_force_between_blocks(currentBin, local_memory[ LOCAL_BLOCK_INDEX(i+1 , j+1) ] );
     }
     //check diagonal right top
     if (j != NUM_BINS_PER_DIM - 1 && i != 0){
-        compute_force_between_blocks(currentBin, bins[(i-1)* NUM_BINS_PER_DIM + j + 1]);
+        compute_force_between_blocks(currentBin, local_memory[ LOCAL_BLOCK_INDEX(i-1 , j+1) ] );
     }
     //check left
     if (j != 0){
-        compute_force_between_blocks(currentBin, bins[i * NUM_BINS_PER_DIM + j -1]);
+        compute_force_between_blocks(currentBin, local_memory[ LOCAL_BLOCK_INDEX(i , j-1) ]);
     }
     //check diagonal left bot
     if (j != 0 && i != NUM_BINS_PER_DIM - 1){
-        compute_force_between_blocks(currentBin, bins[(i+1)*NUM_BINS_PER_DIM+j-1]);
+        compute_force_between_blocks(currentBin, local_memory[ LOCAL_BLOCK_INDEX(i+1 , j-1) ] );
     }
     //check diagonal left top
     if (j != 0 && i != 0){
-        compute_force_between_blocks(currentBin, bins[(i-1)*NUM_BINS_PER_DIM+j-1]);
+        compute_force_between_blocks(currentBin, local_memory[ LOCAL_BLOCK_INDEX(i-1 , j-1) ]);
     }
     //check top
     if (i != 0){
-        compute_force_between_blocks(currentBin, bins[(i-1)*NUM_BINS_PER_DIM+j]);
+        compute_force_between_blocks(currentBin, local_memory[ LOCAL_BLOCK_INDEX(i-1 , j) ] );
     }
     //check bot
     if (i != NUM_BINS_PER_DIM - 1){
-        compute_force_between_blocks(currentBin, bins[(i+1)*NUM_BINS_PER_DIM+j]);
+        compute_force_between_blocks(currentBin, local_memory[ LOCAL_BLOCK_INDEX(i+1, j) ]);
     }
     //compute within itself
     compute_force_within_block(currentBin);
 }
 
-__device__ void move_particles(Bin* bins, Bin* redundantBins, double BIN_SIZE, int NUM_BINS_PER_DIM, double GRID_SIZE, int tid_x,int tid_y){
-    Bin& bin = bins[tid_y*NUM_BINS_PER_DIM + tid_x];
+__device__ void move_particles(Bin* bins, Bin* redundantBins, double BIN_SIZE, int NUM_BINS_PER_DIM, double GRID_SIZE, int i,int j, Bin* local_memory){
+    Bin& bin = local_memory[ LOCAL_BLOCK_INDEX(i , j) ];
     for (int k = 0; k < bin.currentSize; k++){
         particle_t p = bin.particles[k];
         move_gpu(&p, GRID_SIZE);
         bin_change(redundantBins, p, bin.ids[k], BIN_SIZE, NUM_BINS_PER_DIM);
     }
 }
+
+
+
 
 __global__ void compute_move_particles(Bin* bins, Bin* redundantBins, double BIN_SIZE, int NUM_BINS_PER_DIM, double GRID_SIZE){
     int tid_x = threadIdx.x + blockIdx.x * blockDim.x;
@@ -154,28 +161,75 @@ __global__ void compute_move_particles(Bin* bins, Bin* redundantBins, double BIN
     if (tid_y >=NUM_BINS_PER_DIM ){
         return;
     }
-    /*
+    
     __shared__ Bin local_memory[18*18]; 
 
-    int local_i = threadIdx.y;
-    int local_j = threadIdx.x;
+    int i = threadIdx.y;
+    int j = threadIdx.x;
 
+// this numbering might be wrong because i -> y, j -> x but this is wrong passing for tid_x, tid_y
 
-
-    if( 1 <= i && i <= 14 && && 1 <= j && j <= 14 ){
-        local_memory[i*16 + j] = bins[tid_y*NUM_BINS_PER_DIM + tid_x];
+    if( (1 <= i && i <= 14  && 1 <= j && j <= 14) ){
+        local_memory[ LOCAL_BLOCK_INDEX(i, j) ] = *BINS_INDEX_RETURN(tid_x, tid_y, bins);
     }
-    if( (i == 0 || i == 15) && (j == 0  || j == 15)  ){
-        local_memory[i*16 + j]
+    else if( (i == 0 || i == 15) && (j == 0  || j == 15)  ){
+        local_memory[ LOCAL_BLOCK_INDEX(i,j) ] = *BINS_INDEX_RETURN(tid_x, tid_y, bins);
+
+        int i_offset;
+        int j_offset; 
+
+        if(i ==0){
+            i_offset = -1;
+        }
+        else{
+            i_offset = 1;
+        }
+        if(j == 0){
+            j_offset = -1;
+        }
+        else{
+            j_offset = 1; 
+        }
+        local_memory[ LOCAL_BLOCK_INDEX(i+i_offset,j + j_offset) ] = *BINS_INDEX_RETURN(tid_x + i_offset, tid_y + j_offset, bins);
+        local_memory[ LOCAL_BLOCK_INDEX(i+i_offset,j) ] = *BINS_INDEX_RETURN(tid_x+i_offset, tid_y, bins);
+        local_memory[ LOCAL_BLOCK_INDEX(i,j+j_offset) ] = *BINS_INDEX_RETURN(tid_x, tid_y+j_offset, bins);
+        
     }
-    */
+    else if(i== 0 || i == 15){
+        local_memory[ LOCAL_BLOCK_INDEX(i,j) ] = *BINS_INDEX_RETURN(tid_x, tid_y, bins);
+        int i_offset;
+        if(i ==0){
+            i_offset = -1;
+        }
+        else{
+            i_offset = 1;
+        }
+        local_memory[ LOCAL_BLOCK_INDEX(i + i_offset, j) ] =* BINS_INDEX_RETURN(tid_x+i_offset, tid_y, bins);
 
-    //array[tid*y + ticx] = copy 
+    } 
+    else if (j == 0 || j == 15){
+        local_memory[ LOCAL_BLOCK_INDEX(i,j) ] = *BINS_INDEX_RETURN(tid_x, tid_y, bins);
+        int j_offset;
+        if(j == 0){
+            j_offset = -1;
+        }
+        else{
+            j_offset = 1; 
+        }
+        local_memory[ LOCAL_BLOCK_INDEX(i , j+j_offset) ] = *BINS_INDEX_RETURN(tid_x, tid_y+j_offset, bins);
+    }
+    
+    
 
-    //__syncthreads(); 
+    
+    __syncthreads(); 
 
-    compute_force_grid(bins, NUM_BINS_PER_DIM, tid_x, tid_y);
-    move_particles(bins, redundantBins, BIN_SIZE, NUM_BINS_PER_DIM, GRID_SIZE, tid_x, tid_y);
+    compute_force_grid(bins, NUM_BINS_PER_DIM, i, j, local_memory);
+
+    __syncthreads(); 
+    move_particles(bins, redundantBins, BIN_SIZE, NUM_BINS_PER_DIM, GRID_SIZE, i, j, local_memory);
+
+    __syncthreads(); 
 }
 
 
