@@ -11,13 +11,15 @@ TARGETS = serial gpu autograder
 
 all:	$(TARGETS)
 
-serial: 
-	$(CC) -o serial $(CFLAGS) serial.cu common.cu
+serial: serial.o common.o
+	$(CC) -o $@ $(LIBS) $(WALL) serial.o common.o
 gpu: gpu.o common.o
 	$(CC) -o $@ $(NVCCLIBS) $(WALL) gpu.o common.o
 autograder: autograder.o common.o
 	$(CC) -o $@ $(LIBS) $(WALL) autograder.o common.o
 
+serial.o: serial.cu common.h
+	$(CC) -c $(CFLAGS) $(WALL) serial.cu
 autograder.o: autograder.cu common.h
 	$(CC) -c $(CFLAGS) $(WALL) autograder.cu
 gpu.o: gpu.cu gpu.h common.h

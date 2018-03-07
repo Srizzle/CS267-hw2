@@ -8,6 +8,7 @@ CPU-GPU copy time = 0.001009 seconds
 n = 4000, simulation time = 0.067734 seconds
 CPU-GPU copy time = 0.001343 seconds
 n = 8000, simulation time = 0.091973 seconds
+
 n = 500 simulation time = 0.00463 seconds 
 n = 1000 simulation time = 0.009002 seconds 
 n = 2000 simulation time = 0.018087 seconds 

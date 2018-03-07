@@ -154,7 +154,7 @@ __host__ void simulate_particles(particle_t* particles, int n, FILE* fsave, int 
     //gerenate grid
     generateGrid(particles, n);
 
-    for(int step = 0; step < 50; step++ ) {
+    for(int step = 0; step < NSTEPS; step++ ) {
 
         //double computation_begin = read_timer();
         compute_force_grid(particles);
@@ -163,7 +163,7 @@ __host__ void simulate_particles(particle_t* particles, int n, FILE* fsave, int 
         move_particles(particles, n);
 
         //save if necessary
-        if( fsave && (step%1) == 0 ) {
+        if( fsave && (step%SAVEFREQ) == 0 ) {
           save( fsave, n, particles);
         }
     }
