@@ -1,0 +1,34 @@
+SERIAL
+6000 1.59028
+9000 2.10551
+18000 4.0868
+24000 5.4267
+36000 8.18713
+48000 11.1353
+
+OPENMP with 32 threads
+n = 6000, simulation time = 0.148514 seconds
+n = 9000, simulation time = 0.250043 seconds
+n = 18000, simulation time = 0.346474 seconds
+n = 24000, simulation time = 0.530846 seconds
+n = 36000, simulation time = 0.658556 seconds
+n = 48000, simulation time = 0.856973 seconds
+
+
+
+MPI with 32 threads
+n = 6000, simulation time = 0.739809 seconds
+n = 9000, simulation time = 0.736118 seconds
+n = 18000, simulation time = 0.938799 seconds
+n = 24000, simulation time = 0.937171 seconds
+n = 36000, simulation time = 1.09924 seconds
+n = 48000, simulation time = 1.23157 seconds
+
+
+CUDA
+n = 6000, simulation time = 0.075793 seconds
+n = 9000, simulation time = 0.096443 seconds
+n = 18000, simulation time = 0.188712 seconds
+n = 24000, simulation time = 0.259321 seconds
+n = 36000, simulation time = 0.392613 seconds
+n = 48000, simulation time = 0.49078 seconds

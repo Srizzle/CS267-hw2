@@ -1,0 +1,6 @@
+n = 6000, simulation time = 0.739809 seconds
+n = 9000, simulation time = 0.736118 seconds
+n = 18000, simulation time = 0.938799 seconds
+n = 24000, simulation time = 0.937171 seconds
+n = 36000, simulation time = 1.09924 seconds
+n = 48000, simulation time = 1.23157 seconds
